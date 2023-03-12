@@ -1,9 +1,15 @@
-# Simple ADS API query package
+# myADS
 
-# Installation
+## Installation
 
-# Useful functions
+### From source
 
-## ads-check-my-papers
+To install from source:
 
-## ads-check-new-cites
+* Clone the repository using ``git clone https://github.com/stuartmcalpine/myADS.git``
+* Navigate to the ``myADS`` folder
+* Install using `pip install .`
+
+## Keep track of your citations
+
+## Simple ADS API query package
