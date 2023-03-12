@@ -5,35 +5,48 @@ import myads
 from datetime import datetime
 
 class _ADSPaper:
-    def __init__(self, paper_info):
 
+    def __init__(self, paper_info):
+        """
+        Class to store information for a single ADS paper.
+
+        Parameters
+        ----------
+        paper_info : dict
+            Data returned from the query for this paper
+        """
+
+        # Insert query data into this object.
         for att in paper_info.keys():
             setattr(self, att, paper_info[att])
 
-    def get_years_since_publication(self):
+    def get_years_since_publication(self) -> float:
         """
-        Return the number of years since publication.
+        Return the number of years since publication for this paper.
+
+        Requires to of had "pubdate" in the original query.
 
         Returns
         -------
-        diff_years : float
+        - : float
             Total number of years since publication
         """
 
-        # We need to have return publication date in our query.
+        # We need to have had pubdate in our query.
         if hasattr(self, "pubdate"):
 
-            # Convert to datetime
+            # Convert pubdate string to datetime.
             pubyear = int(self.pubdate.split('-')[0])
             pubmonth = int(self.pubdate.split('-')[1])
             if pubmonth == 0:
                 pubmonth += 1
             dt = f"{pubyear}-{pubmonth}"
+
+            # Compute time difference from now.
             diff = datetime.now() - datetime.strptime(dt, "%Y-%m")
 
             # Convert to years.
-            diff_years = diff.total_seconds() / 31536000
-            return diff_years
+            return diff.total_seconds() / 31536000
         else:
             return None
 
@@ -53,7 +66,7 @@ class _ADSPaper:
 
     @property
     def link(self) -> str:
-        """ Return string hyperlink to ADS page """
+        """ Return string hyperlink to ADS page for this paper """
 
         # Need bibcode in original query.
         if not hasattr(self, "bibcode"):
@@ -103,18 +116,6 @@ class _ADSQuery:
             Papers found as result from query
         papers : list of dicts
             Each paper's info stored in a dict
-
-        Example usage
-        -------------
-        import requests
-        ...
-
-        q = "first_author:McAlpine,Stuart" 
-        fl = "title,citation_count,bibcode"
-        rows = 20
-        request_data = requests.get(...)
-
-        X = _ADSQuery(q, fl, rows, request_data)
         """
 
         # Store the query info.
@@ -256,21 +257,6 @@ class ADSQueryWrapper:
         self.ads_api_calls_remaining = resp.headers["X-RateLimit-Remaining"]
 
         return _ADSQuery(q, fl, rows, resp)
-
-    #    def metrics(self, bibcode):
-    #        # Make sure bibcode is list.
-    #        if type(bibcode) == str:
-    #            bibcode = [bibcode]
-    #
-    #        # Need authorization token in header.
-    #        headers={"Authorization": f"Bearer:{self.token}"}
-    #
-    #        url = "https://api.adsabs.harvard.edu/v1/metrics"
-    #        myobj = {'bibcodes': bibcode}
-    #        x = requests.post(url, json=myobj, headers=headers)
-    #        self.ads_api_calls += 1
-    #
-    #        return _ADSQuery(q, fl, rows, resp)
 
     def citations(self, bibcode, fl="title,bibcode,author,citation_count", rows=2000):
         """

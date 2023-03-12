@@ -11,9 +11,22 @@ from myads.query import ADSQueryWrapper
 # Set up ADS Query object.
 query = ADSQueryWrapper()
 
+# My information.
+_FIRST_NAME = myads.config["_FIRST_NAME"]
+_LAST_NAME = myads.config["_LAST_NAME"]
 
-def _load_database(_DATABASE_FILE):
-    """ Load the database file. """
+# Path to database file.
+_DATABASE_FILE = myads.config["_DATABASE_FILE"]
+
+def _load_database() -> dict:
+    """
+    Load the database file.
+
+    Returns
+    -------
+    data : dict
+        Database of citations to our papers
+    """
 
     with open(_DATABASE_FILE, "r") as file:
         data = toml.load(file)
@@ -21,16 +34,30 @@ def _load_database(_DATABASE_FILE):
     return data
 
 
-def _save_database(data, _DATABASE_FILE):
-    """ Save/update database file. """
+def _save_database(data):
+    """ 
+    Save/update database file.
+
+    Parameters
+    ----------
+    data : dict
+        Database of our cites to be saved
+    """
 
     with open(_DATABASE_FILE, "w") as outfile:
         toml.dump(data, outfile)
     print(f"Saved {_DATABASE_FILE}.")
 
 
-def _refresh_database(data):
-    """ Get the most up to date cites to our papers. """
+def _refresh_database(data) -> dict:
+    """
+    Get the most up-to-date cites to our papers.
+
+    Returns
+    -------
+    database : dict
+        Details the up-to-date cites of our papers
+    """
 
     database = {}
 
@@ -44,17 +71,35 @@ def _refresh_database(data):
 
 
 def _print_new_cites(database, new_cite_papers):
+    """
+    Print any new citations to our papers since last call.
+
+    Parameters
+    ----------
+    database : dict
+        Current papers that cited our papers
+    new_cite_papers : dict
+        New papers added to database (the ones we are printing here)
+    """
+
+    # Colours for the terminal.
     BOLD = "\033[1m"
     OKCYAN = "\033[96m"
     ENDC = "\033[0m"
 
+    # Loop over each of our papers.
     for bibcode in new_cite_papers.keys():
+
+        # Do we have any new cites?
         new = new_cite_papers[bibcode]
 
         if len(new) > 0:
+
+            # Print new cites.
             print(
-                "\n"
-                + f"{BOLD}{OKCYAN}{len(new)} new cite(s) for {database[bibcode]['title'][0]}{ENDC}"
+                "\n",
+                f"{BOLD}{OKCYAN}{len(new)} new cite(s) for"
+                f"{database[bibcode]['title'][0]}{ENDC}"
             )
             table = []
             for paper in new:
@@ -63,7 +108,7 @@ def _print_new_cites(database, new_cite_papers):
                         paper.title[0],
                         paper.author,
                         paper.date[:10],
-                        f"https://ui.adsabs.harvard.edu/abs/{paper.bibcode}/abstract",
+                        paper.link,
                     ]
                 )
 
@@ -80,13 +125,8 @@ def _print_new_cites(database, new_cite_papers):
 def _check():
     """
     Check against our personal database to see if there are any new cites to
-    our papers.
+    our papers since the last call.
     """
-
-    # My information.
-    _FIRST_NAME = myads.config["_FIRST_NAME"]
-    _LAST_NAME = myads.config["_LAST_NAME"]
-    _DATABASE_FILE = myads.config["_DATABASE_FILE"]
 
     # Query my papers.
     data = query.get(
@@ -98,7 +138,7 @@ def _check():
 
     if os.path.isfile(_DATABASE_FILE):
         # Load existing database.
-        database = _load_database(_DATABASE_FILE)
+        database = _load_database()
 
         # Is there a new paper since last time thats not in the database?
         for bibcode in data.get_all("bibcode"):
@@ -134,11 +174,11 @@ def _check():
 
         # Update database with new entries.
         if new_entry:
-            _save_database(database, _DATABASE_FILE)
+            _save_database(database)
     else:
         # Create new database (first time run).
         print("First time run, creating new ADS database file...")
-        _save_database(_refresh_database(data), _DATABASE_FILE)
+        _save_database(_refresh_database(data))
 
 
 def _report():
@@ -146,10 +186,6 @@ def _report():
     Query the user as first author, and print the current citation count. This
     uses the details in the profile set by "myads --init".
     """
-
-    # My information.
-    _FIRST_NAME = myads.config["_FIRST_NAME"]
-    _LAST_NAME = myads.config["_LAST_NAME"]
 
     # Query my papers.
     data = query.get(

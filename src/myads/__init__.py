@@ -10,7 +10,7 @@ if not os.path.isdir(os.path.join(_wd, "database")):
 
 # Load the config file with users ADS info.
 if not os.path.isfile(os.path.join(_wd, "myinfo.toml")):
-    _config = None
+    config = None
 else:
     myinfo = toml.load(os.path.join(_wd, "myinfo.toml"))
     
