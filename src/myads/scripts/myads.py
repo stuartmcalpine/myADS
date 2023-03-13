@@ -133,6 +133,10 @@ def _check():
         q=f"first_author:{_LAST_NAME},{_FIRST_NAME}", fl="title,citation_count,bibcode"
     )
 
+    # Got a bad status code.
+    if data is None:
+        return
+
     # To store new cites.
     new_cite_list = {}
 
@@ -192,6 +196,10 @@ def _report():
         q=f"first_author:{_LAST_NAME},{_FIRST_NAME}",
         fl="title,citation_count,pubdate,bibcode",
     )
+
+    # Got a bad status code.
+    if data is None:
+        return
 
     # Loop over each of my papers and print the number of cites.
     table = []

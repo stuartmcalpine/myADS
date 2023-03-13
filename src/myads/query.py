@@ -253,6 +253,11 @@ class ADSQueryWrapper:
         resp = requests.get(url, headers=headers)
         self.ads_api_calls += 1
 
+        # Check status code.
+        if resp.status_code != 200:
+            print(f"Recieved status code {resp.status_code} from ADS, try again.")
+            return None
+
         # Look at the header to see how many queries we have left.
         self.ads_api_calls_remaining = resp.headers["X-RateLimit-Remaining"]
 
