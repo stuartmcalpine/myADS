@@ -1,7 +1,6 @@
 from urllib.parse import urlencode
 import requests
 
-import myads
 from datetime import datetime
 
 class _ADSPaper:
@@ -160,7 +159,7 @@ class _ADSQuery:
 
 
 class ADSQueryWrapper:
-    def __init__(self):
+    def __init__(self, ads_token):
         """
         Class that wraps calls to the ADS API to make easy queries.
 
@@ -182,7 +181,7 @@ class ADSQueryWrapper:
         """
 
         # ADS API token.
-        self.token = myads.config["_ADS_TOKEN"]
+        self.token = ads_token
 
         # Log how many ADS API calls this object has used in this session.
         self.ads_api_calls = 0
