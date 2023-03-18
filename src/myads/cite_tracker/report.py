@@ -2,11 +2,12 @@ import myads.cite_tracker as cite_tracker
 import toml
 from myads.query import ADSQueryWrapper
 from tabulate import tabulate
-
+import os
 
 def report():
 
     # Load the user database.
+    assert os.path.isfile(cite_tracker.USER_DATABASE), "No user database created yet, run 'myads --add_user'"
     users = toml.load(cite_tracker.USER_DATABASE)
     assert (
         "ads_token" in users["metadata"].keys()
