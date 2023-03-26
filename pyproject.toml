@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "myads"
 description = "Simple ADS API query package and citation tracker"
+readme = "README.md"
 license = {text = "BSD 3-Clause License"}
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -22,5 +23,3 @@ where = ["src"]  # list of folders that contain the packages (["."] by default)
 
 [project.scripts]
 myads = "myads.scripts.myads:main"
-#ads-check-new-cites = "scripts.check_new_cites:main"
-#ads-check-my-papers = "scripts.check_my_papers:main"

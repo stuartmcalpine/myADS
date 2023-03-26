@@ -1,0 +1,5 @@
+src/myads/cite_tracker/data/*
+*__pycache__*
+*.egg-info*
+build/
+dist/

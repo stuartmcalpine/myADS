@@ -152,6 +152,11 @@ def check():
                     bibcode, fl="title,bibcode,author,date,doi"
                 )
 
+                # Check the query was successful 
+                if tmp_query_data is None:
+                    print(f"Skipping {bibcode} for now, try again..")
+                    continue
+
                 # Compare to database, and see if any new cites have happened since
                 # last check.
                 for paper in tmp_query_data.papers:
