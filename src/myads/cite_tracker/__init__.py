@@ -2,7 +2,7 @@ import os
 
 from .check import check
 from .report import report
-from .users import add_user, print_users, set_ads_token
+from .users import add_user, list_users, remove_user, set_ads_token
 
 # Make sure data directory exists.
 # This is where the user database and cite tracker information goes.
@@ -15,5 +15,5 @@ USER_DATABASE = os.path.join(data_dir, "users.toml")
 
 # Database that tracks cites.
 def get_user_database_path(user_id) -> str:
-    user_database = os.path.join(data_dir, f"user{user_id}_database.toml")
+    user_database = os.path.join(data_dir, f"{user_id}_database.toml")
     return user_database

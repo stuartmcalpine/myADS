@@ -98,11 +98,14 @@ def check():
     query = ADSQueryWrapper(users["metadata"]["ads_token"])
 
     # Loop over each user in the database.
-    for i in range(users["metadata"]["uid_count"]):
+    for att in users.keys():
+        if "user" not in att:
+            continue
 
-        FIRST_NAME = users[f"user{i+1}"]["first_name"]
-        LAST_NAME = users[f"user{i+1}"]["last_name"]
-        ORCID = users[f"user{i+1}"]["orcid"]
+        # Extract user information.
+        FIRST_NAME = users[att]["first_name"]
+        LAST_NAME = users[att]["last_name"]
+        ORCID = users[att]["orcid"]
         print(f"\nChecking new cites for {FIRST_NAME} {LAST_NAME}...")
 
         # Query.
@@ -129,7 +132,7 @@ def check():
         new_cite_list = {}
 
         # Path to users database.
-        user_database = cite_tracker.get_user_database_path(i + 1)
+        user_database = cite_tracker.get_user_database_path(att)
 
         # Does the user already have a database?
         if os.path.isfile(user_database):
@@ -152,7 +155,7 @@ def check():
                     bibcode, fl="title,bibcode,author,date,doi"
                 )
 
-                # Check the query was successful 
+                # Check the query was successful
                 if tmp_query_data is None:
                     print(f"Skipping {bibcode} for now, try again..")
                     continue

@@ -33,7 +33,7 @@ def _save_user_database(data):
         toml.dump(data, f)
 
 
-def print_users():
+def list_users():
     """ Print all current users in the database. """
 
     data = _load_user_database()
@@ -68,6 +68,40 @@ def add_user():
     else:
         # First entry.
         data = {"user1": new_user_data, "metadata": {"uid_count": 1}}
+
+    # Save database-
+    _save_user_database(data)
+
+
+def remove_user():
+    """ Remove a user from the database. """
+
+    # Does the user database exist?
+    database_exists = os.path.isfile(cite_tracker.USER_DATABASE)
+    assert database_exists, "No user database yet!"
+
+    # Who to remove
+    removeid = int(input("Enter user to remove (integer ID of user): "))
+
+    # Load the user database.
+    data = _load_user_database()
+
+    # Remove user
+    if f"user{removeid}" in data.keys():
+        print(f"Removing user{removeid}...")
+
+        # Remove cite tracker database.
+        user_database = cite_tracker.get_user_database_path(f"user{removeid}")
+        if os.path.isfile(user_database):
+            os.remove(user_database)
+            print(f"Deleted {user_database}")
+
+        # Remove from users list.
+        del data[f"user{removeid}"]
+    else:
+        print(
+            f"No user{removeid} in database, try 'myads --list_users' to see current users"
+        )
 
     # Save database-
     _save_user_database(data)

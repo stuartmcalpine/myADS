@@ -4,10 +4,15 @@ last_name = "McAlpine"
 orcid = "0000-0002-8286-7809"
 
 [metadata]
-uid_count = 2
+uid_count = 6
 ads_token = "Q9koXzft3H41fFxJCNOVjLExZlJXnLL9VjjYhloK"
 
 [user2]
 first_name = "Matthieu"
 last_name = "Schaller"
 orcid = "0000-0002-2395-4902"
+
+[user6]
+first_name = "Josh"
+last_name = "Borrow"
+orcid = ""

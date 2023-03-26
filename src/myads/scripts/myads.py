@@ -9,11 +9,16 @@ def main():
 
     group.add_argument(
         "--add_user",
-        help="Add new person to track ADS cites",
+        help="Add new person to track list",
         action="store_true",
     )
     group.add_argument(
-        "--print_users",
+        "--remove_user",
+        help="Remove user from track list",
+        action="store_true",
+    )
+    group.add_argument(
+        "--list_users",
         help="Print user list",
         action="store_true",
     )
@@ -30,9 +35,13 @@ def main():
     )
     args = parser.parse_args()
 
-    # Create or update user ADS details
+    # Add a user to the database
     if args.add_user:
         cite_tracker.add_user()
+
+    # Remove a user from the database
+    if args.remove_user:
+        cite_tracker.remove_user()
 
     # Set the ADS API token.
     elif args.set_ads_token is not None:
@@ -43,8 +52,8 @@ def main():
         cite_tracker.report()
 
     # Print user list.
-    elif args.print_users:
-        cite_tracker.print_users()
+    elif args.list_users:
+        cite_tracker.list_users()
 
     # Check if any new cites have been made to the user since last call
     elif args.check:

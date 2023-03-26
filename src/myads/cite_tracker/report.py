@@ -1,13 +1,17 @@
+import os
+
 import myads.cite_tracker as cite_tracker
 import toml
 from myads.query import ADSQueryWrapper
 from tabulate import tabulate
-import os
+
 
 def report():
 
     # Load the user database.
-    assert os.path.isfile(cite_tracker.USER_DATABASE), "No user database created yet, run 'myads --add_user'"
+    assert os.path.isfile(
+        cite_tracker.USER_DATABASE
+    ), "No user database created yet, run 'myads --add_user'"
     users = toml.load(cite_tracker.USER_DATABASE)
     assert (
         "ads_token" in users["metadata"].keys()
@@ -17,10 +21,14 @@ def report():
     query = ADSQueryWrapper(users["metadata"]["ads_token"])
 
     # Loop over each user in the database.
-    for i in range(users["metadata"]["uid_count"]):
-        FIRST_NAME = users[f"user{i+1}"]["first_name"]
-        LAST_NAME = users[f"user{i+1}"]["last_name"]
-        ORCID = users[f"user{i+1}"]["orcid"]
+    for att in users.keys():
+        if "user" not in att:
+            continue
+
+        # Extract this users information.
+        FIRST_NAME = users[att]["first_name"]
+        LAST_NAME = users[att]["last_name"]
+        ORCID = users[att]["orcid"]
 
         # Query.
         if ORCID == "":
