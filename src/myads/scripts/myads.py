@@ -33,6 +33,9 @@ def main():
     group.add_argument(
         "--check", help="Check for any new cites to users papers", action="store_true"
     )
+    parser.add_argument(
+        "--verbose", help="For more output", action="store_true"
+    )
     args = parser.parse_args()
 
     # Add a user to the database
@@ -57,4 +60,4 @@ def main():
 
     # Check if any new cites have been made to the user since last call
     elif args.check:
-        cite_tracker.check()
+        cite_tracker.check(args.verbose)

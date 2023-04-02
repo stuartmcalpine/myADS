@@ -29,18 +29,18 @@ def report():
         FIRST_NAME = users[att]["first_name"]
         LAST_NAME = users[att]["last_name"]
         ORCID = users[att]["orcid"]
+        print(f"\nReporting cites for {FIRST_NAME} {LAST_NAME}...")
 
         # Query.
         if ORCID == "":
-            data = query.get(
-                q=f"first_author:{LAST_NAME},{FIRST_NAME}",
-                fl="title,citation_count,pubdate,bibcode",
-            )
+            q=f"first_author:{LAST_NAME},{FIRST_NAME}"
         else:
-            data = query.get(
-                q=f"orcid_pub:{ORCID} OR orcid_user:{ORCID} OR orcid_other:{ORCID} first_author:{LAST_NAME},{FIRST_NAME}",
-                fl="title,citation_count,pubdate,bibcode",
+            q = (
+                f"orcid_pub:{ORCID} OR orcid_user:{ORCID} OR orcid_other:{ORCID} "
+                f"first_author:{LAST_NAME},{FIRST_NAME}"
             )
+
+        data = query.get(q=q, fl="title,citation_count,pubdate,bibcode")
 
         # Got a bad status code.
         if data is None:
@@ -50,8 +50,6 @@ def report():
         if len(data.papers) == 0:
             print(f"No paper hits for {FIRST_NAME} {LAST_NAME}")
             continue
-        else:
-            print(f"\nReport for {FIRST_NAME} {LAST_NAME}")
 
         # Loop over each of my papers and print the number of cites.
         table = []

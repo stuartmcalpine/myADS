@@ -219,7 +219,7 @@ class ADSQueryWrapper:
 
         return urlencode(query)
 
-    def get(self, q, fl, rows=20):
+    def get(self, q, fl, rows=20, max_attempts=3):
         """
         Perform generic query using the ADS API.
 
@@ -231,6 +231,8 @@ class ADSQueryWrapper:
             Properties to return from query
         rows : int (optional)
             Max number of rows to return from the query
+        max_attempts : int
+            How many times do we try before we give up?
 
         Returns
         -------
@@ -249,12 +251,21 @@ class ADSQueryWrapper:
         headers = {"Authorization": f"Bearer:{self.token}"}
 
         # Make get request.
-        resp = requests.get(url, headers=headers)
-        self.ads_api_calls += 1
+        for i in range(max_attempts):
+            resp = requests.get(url, headers=headers)
+            self.ads_api_calls += 1
 
-        # Check status code.
+            # Check status code.
+            if resp.status_code != 200:
+                print(f"Attempt {i+1} recieved status code ",
+                      f"{resp.status_code} from ADS, trying again...")
+                continue
+            else:
+                break
+
+        # Case where we never got a good reponse from ADS
         if resp.status_code != 200:
-            print(f"Recieved status code {resp.status_code} from ADS, try again.")
+            print(f"Recieved too many bad status codes...")
             return None
 
         # Look at the header to see how many queries we have left.

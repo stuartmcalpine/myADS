@@ -82,10 +82,15 @@ def _save_database(path, data):
         toml.dump(data, f)
 
 
-def check():
+def check(verbose):
     """
     Check against our personal database to see if there are any new cites to
     our papers since the last call.
+
+    Parameters
+    ----------
+    verbose : bool  
+        True for more output
     """
 
     # Load the user database.
@@ -149,29 +154,14 @@ def check():
 
             # Loop over each paper in database.
             for bibcode in database.keys():
-                print(f"Checking {bibcode}...", end="")
+                if verbose:
+                    print(f"Checking {bibcode}...")
                 new_cite_list[bibcode] = []
 
                 # Get up-to-date cites for this paper.
-                tmp_query_data = None
-                current_trys = 0
-
-                while tmp_query_data is None:
-
-                    tmp_query_data = query.citations(
-                        bibcode, fl="title,bibcode,author,date,doi"
-                    )
-
-                    # Was this a good try?
-                    current_trys += 1
-                    if tmp_query_data is None:
-                        print(f"check {current_trys} was bad...", end="")
-                    else:
-                        print(f"check {current_trys} was good...")
-
-                    # Have I hit my limit of trys?
-                    if current_trys >= 3:
-                        break
+                tmp_query_data = query.citations(
+                    bibcode, fl="title,bibcode,author,date,doi"
+                )
 
                 # Check the query was successful
                 if tmp_query_data is None:
