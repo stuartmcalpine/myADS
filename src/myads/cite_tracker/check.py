@@ -56,7 +56,7 @@ def _print_new_cites(database, new_cite_papers):
             # Print new cites.
             print(
                 "\n",
-                f"{BOLD}{OKCYAN}{len(new)} new cite(s) for"
+                f"{BOLD}{OKCYAN}{len(new)} new cite(s) for "
                 f"{database[bibcode]['title'][0]}{ENDC}",
             )
             table = []
@@ -115,10 +115,11 @@ def check():
                 fl="title,citation_count,pubdate,bibcode",
             )
         else:
-            data = query.get(
-                q=f"orcid_pub:{ORCID} OR orcid_user:{ORCID} OR orcid_other:{ORCID} first_author:{LAST_NAME},{FIRST_NAME}",
-                fl="title,citation_count,pubdate,bibcode",
+            q = (
+                f"orcid_pub:{ORCID} OR orcid_user:{ORCID} OR orcid_other:{ORCID} "
+                f"first_author:{LAST_NAME},{FIRST_NAME}"
             )
+            data = query.get(q=q, fl="title,citation_count,pubdate,bibcode")
 
         # Got a bad status code.
         if data is None:
@@ -148,12 +149,29 @@ def check():
 
             # Loop over each paper in database.
             for bibcode in database.keys():
+                print(f"Checking {bibcode}...", end="")
                 new_cite_list[bibcode] = []
 
                 # Get up-to-date cites for this paper.
-                tmp_query_data = query.citations(
-                    bibcode, fl="title,bibcode,author,date,doi"
-                )
+                tmp_query_data = None
+                current_trys = 0
+
+                while tmp_query_data is None:
+
+                    tmp_query_data = query.citations(
+                        bibcode, fl="title,bibcode,author,date,doi"
+                    )
+
+                    # Was this a good try?
+                    current_trys += 1
+                    if tmp_query_data is None:
+                        print(f"check {current_trys} was bad...", end="")
+                    else:
+                        print(f"check {current_trys} was good...")
+
+                    # Have I hit my limit of trys?
+                    if current_trys >= 3:
+                        break
 
                 # Check the query was successful
                 if tmp_query_data is None:
