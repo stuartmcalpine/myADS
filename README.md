@@ -1,3 +1,6 @@
+[![PyPI version](https://badge.fury.io/py/myads.svg)](https://badge.fury.io/py/myads)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/myads?logo=python)
+
 # myADS
 
 `myADS` is a simple package to keep track of citations to your (and other
