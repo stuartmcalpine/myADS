@@ -17,7 +17,10 @@ class _ADSPaper:
 
         # Insert query data into this object.
         for att in paper_info.keys():
-            setattr(self, att, paper_info[att])
+            if att == "title":
+                setattr(self, att, paper_info[att][0])
+            else:
+                setattr(self, att, paper_info[att])
 
     def get_years_since_publication(self) -> float:
         """

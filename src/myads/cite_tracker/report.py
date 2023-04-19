@@ -33,7 +33,7 @@ def report():
 
         # Query.
         if ORCID == "":
-            q=f"first_author:{LAST_NAME},{FIRST_NAME}"
+            q = f"first_author:{LAST_NAME},{FIRST_NAME}"
         else:
             q = (
                 f"orcid_pub:{ORCID} OR orcid_user:{ORCID} OR orcid_other:{ORCID} "
@@ -56,7 +56,7 @@ def report():
         for paper in data.papers:
             table.append(
                 [
-                    paper.title[0],
+                    paper.title,
                     f"{paper.citation_count} ({paper.citations_per_year:.1f})",
                     paper.pubdate,
                     paper.link,

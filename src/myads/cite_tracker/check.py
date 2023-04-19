@@ -8,13 +8,17 @@ from tabulate import tabulate
 
 def _refresh_database(data, query) -> dict:
     """
-    Get the most up-to-date cites to our papers.
+    Get the most up-to-date cites to the users' papers.
+
+    Parameters
+    ----------
+    data : 
+    query : ADSQueryWrapper object
 
     Returns
     -------
     database : dict
-        Details the up-to-date cites of our papers
-    query : ADSQueryWrapper object
+        Details the up-to-date cites of the users' papers
     """
 
     database = {}
@@ -57,12 +61,12 @@ def _print_new_cites(database, new_cite_papers):
             print(
                 "\n",
                 f"{BOLD}{OKCYAN}{len(new)} new cite(s) for "
-                f"{database[bibcode]['title'][0]}{ENDC}",
+                f"{database[bibcode]['title']}{ENDC}",
             )
             table = []
             for paper in new:
                 table.append(
-                    [paper.title[0], paper.author, paper.date[:10], paper.link,]
+                    [paper.title, paper.author, paper.date[:10], paper.link,]
                 )
 
             print(
@@ -76,7 +80,16 @@ def _print_new_cites(database, new_cite_papers):
 
 
 def _save_database(path, data):
-    """ Save the user database. """
+    """
+    Save the users cite database.
+
+    Parameters
+    ----------
+    path : str
+        Path to user database file
+    data : dict
+        Users' cite information
+    """
 
     with open(path, "w") as f:
         toml.dump(data, f)
@@ -84,8 +97,8 @@ def _save_database(path, data):
 
 def check(verbose):
     """
-    Check against our personal database to see if there are any new cites to
-    our papers since the last call.
+    Check against each users' personal database to see if there are any new
+    cites to their papers since the last call.
 
     Parameters
     ----------
@@ -115,18 +128,20 @@ def check(verbose):
 
         # Query.
         if ORCID == "":
+            # Query just by first name last name.
             data = query.get(
                 q=f"first_author:{LAST_NAME},{FIRST_NAME}",
                 fl="title,citation_count,pubdate,bibcode",
             )
         else:
+            # Query also using the ORCID.
             q = (
                 f"orcid_pub:{ORCID} OR orcid_user:{ORCID} OR orcid_other:{ORCID} "
                 f"first_author:{LAST_NAME},{FIRST_NAME}"
             )
             data = query.get(q=q, fl="title,citation_count,pubdate,bibcode")
 
-        # Got a bad status code.
+        # Got a bad status code?
         if data is None:
             return
 
@@ -136,19 +151,27 @@ def check(verbose):
 
         # To store new cites.
         new_cite_list = {}
+        brand_new_paper = False
 
-        # Path to users database.
+        # Path to this users' database.
         user_database = cite_tracker.get_user_database_path(att)
 
-        # Does the user already have a database?
+        # Does this user already have a database?
         if os.path.isfile(user_database):
             # Load existing database.
             database = toml.load(user_database)
 
-            # Is there a new paper since last time thats not in the database?
-            for bibcode in data.get_all("bibcode"):
-                if bibcode not in database.keys():
-                    raise NotImplementedError(f"New paper {bibcode}, implement this")
+            # Is there a new paper for this user that's not in the database?
+            for tmp_paper in data.papers:
+                if tmp_paper.bibcode not in database.keys():
+                    brand_new_paper = True
+                    print(
+                        f"New paper for {FIRST_NAME} {LAST_NAME} ({bibcode})",
+                        f"adding to database...",
+                    )
+
+                    # Add new entry to database.
+                    database[bibcode] = {"title": tmp_paper.title, "citations": []}
 
             new_entry = False
 
@@ -185,7 +208,7 @@ def check(verbose):
             _print_new_cites(database, new_cite_list)
 
             # Update database with new entries.
-            if new_entry:
+            if new_entry or brand_new_paper:
                 _save_database(user_database, database)
             else:
                 print(f"No new cites for {FIRST_NAME} {LAST_NAME}")
