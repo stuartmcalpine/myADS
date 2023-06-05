@@ -166,12 +166,12 @@ def check(verbose):
                 if tmp_paper.bibcode not in database.keys():
                     brand_new_paper = True
                     print(
-                        f"New paper for {FIRST_NAME} {LAST_NAME} ({bibcode})",
+                        f"New paper for {FIRST_NAME} {LAST_NAME} ({tmp_paper.bibcode})",
                         f"adding to database...",
                     )
 
                     # Add new entry to database.
-                    database[bibcode] = {"title": tmp_paper.title, "citations": []}
+                    database[tmp_paper.bibcode] = {"title": tmp_paper.title, "citations": []}
 
             new_entry = False
 
