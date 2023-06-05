@@ -6,8 +6,8 @@
 `myADS` is a simple package to keep track of citations to your (and other
 authors) papers.
 
-It both reports your current papers citation metrics, and
-checks for any new cites to your papers since the last time of checking.
+It both reports the authors current paper citation metrics, and checks for any
+new cites to the authors papers since the last time of checking.
 
 Once installed you can always run `myads --help` to see a list of available
 commands.
@@ -32,37 +32,35 @@ To install from source:
 
 ## Getting set up
 
-``myADS`` can keep track of the citations for multiple users. Two steps before
-you get started:
+``myADS`` can keep track of the citations for multiple authors. Two steps
+before you get started:
 
-* Add your users to the database
+* Add your authors you want to track to the database
 * Add your ADS API token to the database
 
-### Adding a user to the database
+### Adding a author to the database
 
-Once `myADS` is installed you can add users to the tracking database using:
+Once `myADS` is installed you can add the authors you wish to track using:
 
 ```bash
-myads user add
+myads author add
 ```
 
 You will be prompted to enter a first and last name, and an optional ORCID
-(however it is recommended you add this for each user when possible).
+(however it is recommended you add this for each author when possible).
 
-### Removing a user from the database
+### Removing a author from the database
 
-You can remove users from the tracking database using:
+You can remove authors from the tracking database using:
 
 ```bash
-myads user remove <user id>
+myads author remove <author id>
 ```
 
-where you will be prompted to enter the users unique tracking ID.
-
-You can get a list of tracking IDs by typing:
+You can get a list of author IDs by typing:
 
 ```bash
-myads user list
+myads author list
 ```
 
 ### Adding your ADS API token
@@ -73,14 +71,14 @@ the package can query on your behalf.
 To add it run:
 
 ```bash
---set_ads_token <YOUR-API-TOKEN-HERE>
+myads token add <YOUR-API-TOKEN-HERE>
 ```
 
 ## Usage
 
 ### Citation reporter
 
-If you run `myads report` you will get a report of all your registered users
+If you run `myads report` you will get a report of all your tracked authors
 current citations, e.g.,
 
 ```bash
@@ -98,7 +96,7 @@ Reporting cites for Stuart McAlpine...
 ### Citation tracker
 
 If you run `myads check` it will tell you any papers that have cited your
-users papers since the last call. 
+tracked authors papers since the last call. 
 
 The first time you run this it will create a local database of your citations.
 From then on it will update the local database with your new cites and report

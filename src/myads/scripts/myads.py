@@ -10,7 +10,7 @@ def main():
 
     # Primary options
     user_parser = subparsers.add_parser(
-        "user", help="Add/remove/list users in the database"
+        "author", help="Add/remove/list tracked authors in the database"
     )
     token_parser = subparsers.add_parser("token", help="Add/update ADS API token")
     report_parser = subparsers.add_parser(
