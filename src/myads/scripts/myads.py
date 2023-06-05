@@ -44,7 +44,7 @@ def main():
 
     args = parser.parse_args()
 
-    if args.subcommand == "user":
+    if args.subcommand == "author":
 
         # Add a user to the database
         if args.user_subparser == "add":
