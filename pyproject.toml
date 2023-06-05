@@ -18,10 +18,14 @@ dependencies = [
 ]
 requires-python = ">=3.7"
 version = "1.0.2"
-keywords = ["nasa-ads", "citations", "astronomy", "ads", "python"]
+keywords = ["nasa-ads", "citations", "astronomy", "ads", "python", "arxiv"]
 
 [tool.setuptools.packages.find]
 where = ["src"]  # list of folders that contain the packages (["."] by default)
 
 [project.scripts]
 myads = "myads.scripts.myads:main"
+
+[project.urls]
+homepage = "https://github.com/stuartmcalpine/myADS"
+repository = "https://github.com/stuartmcalpine/myADS"
