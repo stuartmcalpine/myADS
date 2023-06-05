@@ -43,7 +43,7 @@ you get started:
 Once `myADS` is installed you can add users to the tracking database using:
 
 ```bash
-myads --add_user
+myads user add
 ```
 
 You will be prompted to enter a first and last name, and an optional ORCID
@@ -54,7 +54,7 @@ You will be prompted to enter a first and last name, and an optional ORCID
 You can remove users from the tracking database using:
 
 ```bash
-myads --remove_user
+myads user remove <user id>
 ```
 
 where you will be prompted to enter the users unique tracking ID.
@@ -62,7 +62,7 @@ where you will be prompted to enter the users unique tracking ID.
 You can get a list of tracking IDs by typing:
 
 ```bash
-myads --list_users
+myads user list
 ```
 
 ### Adding your ADS API token
@@ -80,7 +80,7 @@ To add it run:
 
 ### Citation reporter
 
-If you run `myads --report` you will get a report of all your registered users
+If you run `myads report` you will get a report of all your registered users
 current citations, e.g.,
 
 ```bash
@@ -97,7 +97,7 @@ Reporting cites for Stuart McAlpine...
 
 ### Citation tracker
 
-If you run `myads --check` it will tell you any papers that have cited your
+If you run `myads check` it will tell you any papers that have cited your
 users papers since the last call. 
 
 The first time you run this it will create a local database of your citations.

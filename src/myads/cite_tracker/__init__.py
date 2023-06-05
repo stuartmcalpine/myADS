@@ -2,7 +2,7 @@ import os
 
 from .check import check
 from .report import report
-from .users import add_user, list_users, remove_user, set_ads_token
+from .users import add_user, list_users, remove_user, set_ads_token, display_ads_token
 
 # Make sure data directory exists.
 # This is where the user database and cite tracker information goes.

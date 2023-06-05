@@ -45,6 +45,11 @@ def list_users():
                 f"(ORCID={data[att]['orcid']})",
             )
 
+def display_ads_token():
+    """ Print all ADS API tokens in the database. """
+
+    data = _load_user_database()
+
     if "ads_token" in data["metadata"].keys():
         print(f"ADS token: {data['metadata']['ads_token']}")
     else:
@@ -73,15 +78,12 @@ def add_user():
     _save_user_database(data)
 
 
-def remove_user():
+def remove_user(removeid):
     """ Remove a user from the database. """
 
     # Does the user database exist?
     database_exists = os.path.isfile(cite_tracker.USER_DATABASE)
     assert database_exists, "No user database yet!"
-
-    # Who to remove
-    removeid = int(input("Enter user to remove (integer ID of user): "))
 
     # Load the user database.
     data = _load_user_database()
@@ -100,7 +102,7 @@ def remove_user():
         del data[f"user{removeid}"]
     else:
         print(
-            f"No user{removeid} in database, try 'myads --list_users' to see current users"
+            f"No user {removeid} in database, try 'myads user list' to see current users"
         )
 
     # Save database-
