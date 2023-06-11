@@ -41,7 +41,7 @@ def report():
             )
 
         data = query.get(q=q, fl="title,citation_count,pubdate,bibcode")
-
+        
         # Got a bad status code.
         if data is None:
             return
@@ -54,6 +54,12 @@ def report():
         # Loop over each of my papers and print the number of cites.
         table = []
         for paper in data.papers:
+
+            # Sometimes the citation count is missing in the return.
+            # This is usually when papers transition from arxiv to published
+            if not hasattr(paper, "citation_count"):
+                paper.citation_count = -1
+
             table.append(
                 [
                     paper.title,

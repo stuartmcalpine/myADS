@@ -61,7 +61,7 @@ class _ADSPaper:
         """
 
         pubyears = self.get_years_since_publication()
-        if pubyears is None or not hasattr(self, "citation_count"):
+        if (pubyears is None) or (not hasattr(self, "citation_count")):
             return None
         else:
             return self.citation_count / pubyears
