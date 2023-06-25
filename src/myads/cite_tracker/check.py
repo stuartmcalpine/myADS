@@ -57,17 +57,28 @@ def _print_new_cites(database, new_cite_papers):
 
         if len(new) > 0:
 
-            # Print new cites.
+            # The paper we are printing new cites for.
             print(
                 "\n",
                 f"{BOLD}{OKCYAN}{len(new)} new cite(s) for "
                 f"{database[bibcode]['title']}{ENDC}",
             )
             table = []
+
+            # For each new cite to this paper.
             for paper in new:
-                table.append(
-                    [paper.title, paper.author, paper.date[:10], paper.link,]
-                )
+                tmp = []
+
+                # The attributes we want to print.
+                for att in ["title", "author", "date", "link"]:
+                    if hasattr(paper, att):
+                        if att == "date":
+                            tmp.append(getattr(paper, att)[:10])
+                        else:
+                            tmp.append(getattr(paper, att))
+                    else:
+                        tmp.append("Unknown")
+                table.append(tmp)
 
             print(
                 tabulate(
