@@ -46,9 +46,13 @@ class _ADSPaper:
 
             # Compute time difference from now.
             diff = datetime.now() - datetime.strptime(dt, "%Y-%m")
+            diff = diff.total_seconds()
+
+            if diff <= 0:
+                diff = 0.0
 
             # Convert to years.
-            return diff.total_seconds() / 31536000
+            return diff / 31536000
         else:
             return None
 
@@ -63,6 +67,8 @@ class _ADSPaper:
         pubyears = self.get_years_since_publication()
         if (pubyears is None) or (not hasattr(self, "citation_count")):
             return None
+        elif pubyears <= 1/12:
+            return 0.0
         else:
             return self.citation_count / pubyears
 

@@ -45,6 +45,11 @@ def main():
         "--verbose", help="True for more output", action="store_true"
     )
 
+    # Report options
+    report_parser.add_argument(
+        "--short", help="True for less columns", action="store_true"
+    )
+
     args = parser.parse_args()
 
     if args.subcommand == "author":
@@ -74,7 +79,7 @@ def main():
 
     # Report users current citation statistics
     elif args.subcommand == "report":
-        cite_tracker.report()
+        cite_tracker.report(not args.short)
 
     # Check if any new cites have been made to the user since last call
     elif args.subcommand == "check":
