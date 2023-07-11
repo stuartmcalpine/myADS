@@ -1,5 +1,6 @@
 import os
 import toml
+from ._version import __version__
 
 # Working directory of ADS package (where database will be stored).
 _wd = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))

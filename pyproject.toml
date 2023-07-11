@@ -17,8 +17,8 @@ dependencies = [
     'tabulate>=0.9.0'
 ]
 requires-python = ">=3.7"
-version = "1.0.3"
 keywords = ["nasa-ads", "citations", "astronomy", "ads", "python", "arxiv"]
+dynamic = ["version"] # Scrape the version dynamically from the package
 
 [tool.setuptools.packages.find]
 where = ["src"]  # list of folders that contain the packages (["."] by default)
@@ -29,3 +29,6 @@ myads = "myads.scripts.myads:main"
 [project.urls]
 homepage = "https://github.com/stuartmcalpine/myADS"
 repository = "https://github.com/stuartmcalpine/myADS"
+
+[tool.setuptools.dynamic]
+version = {attr = "myads._version.__version__"}
