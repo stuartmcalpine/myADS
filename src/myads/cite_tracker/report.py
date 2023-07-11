@@ -7,28 +7,25 @@ from tabulate import tabulate
 
 
 def report():
+    """
+    For each tracked author, print their current citation metrics.
+    """
 
-    # Load the user database.
-    assert os.path.isfile(
-        cite_tracker.USER_DATABASE
-    ), "No user database created yet, run 'myads --add_user'"
-    users = toml.load(cite_tracker.USER_DATABASE)
-    assert (
-        "ads_token" in users["metadata"].keys()
-    ), "No ADS API token has been added yet, run 'myads --set_ads_token <TOKEN>'"
+    authors = cite_tracker.load_author_list()
+    token = cite_tracker.load_ads_token()
 
     # Query object.
-    query = ADSQueryWrapper(users["metadata"]["ads_token"])
+    query = ADSQueryWrapper(token)
 
     # Loop over each user in the database.
-    for att in users.keys():
-        if "user" not in att:
+    for att in authors.keys():
+        if att == "metadata":
             continue
 
         # Extract this users information.
-        FIRST_NAME = users[att]["first_name"]
-        LAST_NAME = users[att]["last_name"]
-        ORCID = users[att]["orcid"]
+        FIRST_NAME = authors[att]["first_name"]
+        LAST_NAME = authors[att]["last_name"]
+        ORCID = authors[att]["orcid"]
         print(f"\nReporting cites for {FIRST_NAME} {LAST_NAME}...")
 
         # Query.
@@ -41,7 +38,7 @@ def report():
             )
 
         data = query.get(q=q, fl="title,citation_count,pubdate,bibcode")
-        
+
         # Got a bad status code.
         if data is None:
             return
