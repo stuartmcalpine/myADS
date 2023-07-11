@@ -71,7 +71,7 @@ the package can query on your behalf.
 To add it run:
 
 ```bash
-myads token add <YOUR-API-TOKEN-HERE>
+myads token update <YOUR-API-TOKEN-HERE>
 ```
 
 ## Usage

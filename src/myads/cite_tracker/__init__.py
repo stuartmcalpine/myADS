@@ -64,6 +64,8 @@ def update_ads_token(token):
     token : str
     """
 
+    create_data_dir()
+
     with open(ADS_TOKEN_PATH, "w") as f:
         f.write(token)
 

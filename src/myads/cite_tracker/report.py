@@ -6,9 +6,14 @@ from myads.query import ADSQueryWrapper
 from tabulate import tabulate
 
 
-def report():
+def report(long_report):
     """
     For each tracked author, print their current citation metrics.
+
+    Parameters
+    ----------
+    long_report : bool
+        True for more columns
     """
 
     authors = cite_tracker.load_author_list()
@@ -36,8 +41,11 @@ def report():
                 f"orcid_pub:{ORCID} OR orcid_user:{ORCID} OR orcid_other:{ORCID} "
                 f"first_author:{LAST_NAME},{FIRST_NAME}"
             )
-
-        data = query.get(q=q, fl="title,citation_count,pubdate,bibcode")
+    
+        ret_list = "title,citation_count,pubdate,bibcode"
+        if long_report:
+            ret_list += ",read_count"
+        data = query.get(q=q, fl=ret_list)
 
         # Got a bad status code.
         if data is None:
@@ -52,30 +60,34 @@ def report():
         table = []
         for paper in data.papers:
 
-            # Sometimes the citation count is missing in the return.
-            # This is usually when papers transition from arxiv to published
-            if not hasattr(paper, "citation_count"):
-                paper.citation_count = -1
-
-            table.append(
-                [
+            tmp = [
                     paper.title,
                     f"{paper.citation_count} ({paper.citations_per_year:.1f})",
                     paper.pubdate,
                     paper.link,
                 ]
-            )
+            
+            if long_report:
+                tmp.append(paper.read_count)
+
+            table.append(tmp)
+
+        headers = [
+                    "Title",
+                    "Citations\n(per year)",
+                    "Publication\nDate",
+                    "Bibcode",
+                ]
+        maxcolwidths=[50, None, None, None]
+        if long_report:
+            headers.append("Read count\n(90 days)")
+            maxcolwidths.append(None)
 
         print(
             tabulate(
                 table,
                 tablefmt="grid",
-                maxcolwidths=[50, None, None, None],
-                headers=[
-                    "Title",
-                    "Citations\n(per year)",
-                    "Publication\nDate",
-                    "Bibcode",
-                ],
+                maxcolwidths=maxcolwidths,
+                headers=headers
             )
         )
