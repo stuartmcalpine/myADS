@@ -228,7 +228,7 @@ class ADSQueryWrapper:
 
         return urlencode(query)
 
-    def get(self, q, fl, rows=20, max_attempts=3):
+    def get(self, q, fl, sort=None, rows=20, max_attempts=3, verbose=False):
         """
         Perform generic query using the ADS API.
 
@@ -238,10 +238,15 @@ class ADSQueryWrapper:
             The query sent to ADS
         fl : string
             Properties to return from query
+        sort : string
+            Sort criteria for returned results
+            e.g., "citation_count desc"
         rows : int (optional)
             Max number of rows to return from the query
         max_attempts : int
             How many times do we try before we give up?
+        verbose : bool
+            True for more output
 
         Returns
         -------
@@ -252,8 +257,16 @@ class ADSQueryWrapper:
         # Build query dict.
         query = {"q": q, "fl": fl, "rows": rows}
 
+        # Add sorting options
+        if sort is not None:
+            query["sort"] = sort
+
         # Convert query dict to string.
+        if verbose:
+            print(f"Query dict: {q}")
         q = self._encode_string(query)
+        if verbose:
+            print(f"Query str: {q}")
         url = f"https://api.adsabs.harvard.edu/v1/search/query?{q}"
 
         # Need authorization token in header.
