@@ -1,20 +1,10 @@
-import os
-
 import myads.cite_tracker as cite_tracker
-import toml
 from myads.query import ADSQueryWrapper
 from tabulate import tabulate
 
 
-def report(long_report):
-    """
-    For each tracked author, print their current citation metrics.
-
-    Parameters
-    ----------
-    long_report : bool
-        True for more columns
-    """
+def report():
+    """ For each tracked author, print their current citation metrics. """
 
     authors = cite_tracker.load_author_list()
     token = cite_tracker.load_ads_token()
@@ -41,53 +31,42 @@ def report(long_report):
                 f"orcid_pub:{ORCID} OR orcid_user:{ORCID} OR orcid_other:{ORCID} "
                 f"first_author:{LAST_NAME},{FIRST_NAME}"
             )
-    
+
         ret_list = "title,citation_count,pubdate,bibcode"
-        if long_report:
-            ret_list += ",read_count"
-        data = query.get(q=q, fl=ret_list)
+        data = query.get(q=q, fl=ret_list, rows=50, sort="pubdate desc")
 
         # Got a bad status code.
         if data is None:
             return
 
         # Found no papers in query.
-        if len(data.papers) == 0:
+        if data.num_found == 0:
             print(f"No paper hits for {FIRST_NAME} {LAST_NAME}")
             continue
 
-        # Loop over each of my papers and print the number of cites.
-        table = []
-        for paper in data.papers:
-
-            tmp = [
-                    paper.title,
-                    f"{paper.citation_count} ({paper.citations_per_year:.1f})",
-                    paper.pubdate,
-                    paper.link,
-                ]
-            
-            if long_report:
-                tmp.append(paper.read_count)
-
-            table.append(tmp)
-
+        # Header names for the columns
         headers = [
-                    "Title",
-                    "Citations\n(per year)",
-                    "Publication\nDate",
-                    "Bibcode",
-                ]
-        maxcolwidths=[50, None, None, None]
-        if long_report:
-            headers.append("Read count\n(90 days)")
-            maxcolwidths.append(None)
+            "Title",
+            "Citations\n(per year)",
+            "Publication\nDate",
+            "Bibcode",
+        ]
+        maxcolwidths = [50, None, None, None]
 
+        # Make a new column combining cite information
+        df = data.papers
+        df["citation_count_extra"] = df.apply(
+            lambda x: f"{x['citation_count']} ({x['citation_count_per_year']:.1f})",
+            axis=1,
+        )
+
+        # Print the table
         print(
             tabulate(
-                table,
+                df[["title", "citation_count_extra", "pubdate", "bibcode"]],
                 tablefmt="grid",
                 maxcolwidths=maxcolwidths,
-                headers=headers
+                showindex="never",
+                headers=headers,
             )
         )

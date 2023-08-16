@@ -40,7 +40,8 @@ def list_tracked_authors():
         for att in authors.keys():
             if "author" in att:
                 print(
-                    f"{att}: {authors[att]['first_name']} {authors[att]['last_name']}",
+                    f"{att}: {authors[att]['first_name']}",
+                    f"{authors[att]['last_name']}",
                     f"(ORCID={authors[att]['orcid']})",
                 )
 
@@ -90,10 +91,10 @@ def remove_tracked_author(removeid):
         print(f"Removing author{removeid}...")
 
         # Remove cite tracker database.
-        # user_database = cite_tracker.get_user_database_path(f"user{removeid}")
-        # if os.path.isfile(user_database):
-        #    os.remove(user_database)
-        #    print(f"Deleted {user_database}")
+        user_database = cite_tracker.get_author_database_path(f"author{removeid}")
+        if os.path.isfile(user_database):
+            os.remove(user_database)
+            print(f"Deleted {user_database}")
 
         # Remove from users list.
         del authors[f"author{removeid}"]
