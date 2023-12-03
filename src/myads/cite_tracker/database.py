@@ -84,11 +84,6 @@ class Database:
         # Create the tables in the database
         Base.metadata.create_all(self.engine)
 
-        self.add_author("stuart", "mcalpine")
-        self.add_ads_token("Q9koXzft3H41fFxJCNOVjLExZlJXnLL9VjjYhloK")
-
-        self.list_authors()
-
     def add_author(self, forename: str, surname: str, orcid: str = None):
         """Add a new author to the database"""
 
