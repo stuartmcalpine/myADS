@@ -1,7 +1,3 @@
-import os
-
-import myads.cite_tracker as cite_tracker
-import toml
 from myads.query import ADSQueryWrapper
 from tabulate import tabulate
 

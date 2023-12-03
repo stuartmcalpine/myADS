@@ -1,3 +1,3 @@
 from .check import check
-from .report import report
 from .database import Database
+from .report import report

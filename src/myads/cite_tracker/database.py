@@ -1,16 +1,14 @@
 import pandas as pd
-from tabulate import tabulate
 from sqlalchemy import (
-    create_engine,
     Column,
+    ForeignKey,
     Integer,
     String,
-    Sequence,
-    ForeignKey,
     UniqueConstraint,
+    create_engine,
 )
-from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from tabulate import tabulate
 
 _DATABASE = "/home/mcalpine/myADS_database.db"
 
@@ -91,7 +89,7 @@ class Database:
             self.session.add(Author(forename=forename, surname=surname, orcid=orcid))
             self.session.commit()
         except:
-            print(f"Author already exists in the database")
+            print("Author already exists in the database")
 
     def get_authors(self):
         """List all the authors in the database"""
@@ -109,7 +107,6 @@ class Database:
 
     def list_authors(self):
         """List all the authors in the database"""
-        query_result = self.session.query(Author).all()
         df = pd.read_sql_query(self.session.query(Author).statement, self.session.bind)
 
         print(
