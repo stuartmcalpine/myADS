@@ -1,30 +1,29 @@
-import myads.cite_tracker as cite_tracker
 from myads.query import ADSQueryWrapper
 from tabulate import tabulate
 
 
-def report():
-    """ For each tracked author, print their current citation metrics. """
+def report(db):
+    """
+    For each tracked author, print their current citation metrics.
 
-    authors = cite_tracker.load_author_list()
-    token = cite_tracker.load_ads_token()
+    Parameters
+    ----------
+    db : myADS Database object
+    """
 
     # Query object.
-    query = ADSQueryWrapper(token)
+    query = ADSQueryWrapper(db.get_ads_token())
 
     # Loop over each user in the database.
-    for att in authors.keys():
-        if att == "metadata":
-            continue
-
+    for author in db.get_authors():
         # Extract this users information.
-        FIRST_NAME = authors[att]["first_name"]
-        LAST_NAME = authors[att]["last_name"]
-        ORCID = authors[att]["orcid"]
+        FIRST_NAME = author.forename
+        LAST_NAME = author.surname
+        ORCID = author.orcid
         print(f"\nReporting cites for {FIRST_NAME} {LAST_NAME}...")
 
         # Query.
-        if ORCID == "":
+        if not ORCID:
             q = f"first_author:{LAST_NAME},{FIRST_NAME}"
         else:
             q = (
@@ -44,7 +43,18 @@ def report():
             print(f"No paper hits for {FIRST_NAME} {LAST_NAME}")
             continue
 
-        # Header names for the columns
+        # Loop over each of my papers and print the number of cites.
+        table = []
+        for paper in data.papers:
+            tmp = [
+                paper.title,
+                f"{paper.citation_count} ({paper.citations_per_year:.1f})",
+                paper.pubdate,
+                paper.link,
+            ]
+
+            table.append(tmp)
+
         headers = [
             "Title",
             "Citations\n(per year)",
