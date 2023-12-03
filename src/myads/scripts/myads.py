@@ -9,6 +9,8 @@ def main():
     subparsers = parser.add_subparsers(title="subcommand", dest="subcommand")
 
     # Primary options
+    subparsers.add_parser("initialize")
+
     user_parser = subparsers.add_parser(
         "author", help="Add/remove/list tracked authors in the database"
     )
@@ -19,24 +21,21 @@ def main():
     check_parser = subparsers.add_parser(
         "check", help="Check for any new cites for tracked authors"
     )
-    info_parser = subparsers.add_parser(
-        "info", help="Print info"
-    )
-
-    # User options
+    
+    # Author options
     user_subparser = user_parser.add_subparsers(
         title="user_subparser", dest="user_subparser"
     )
     user_subparser.add_parser("add", help="Add a new author to be tracked")
     user_subparser.add_parser("list", help="List current tracked authors")
     tmp = user_subparser.add_parser("remove", help="Remove an existing tracked author")
-    tmp.add_argument("author_id", help="ID of tracked author to remove")
+    tmp.add_argument("author_id", help="ID of tracked author to remove", type=int)
 
     # ADS API token options
     token_subparser = token_parser.add_subparsers(
         title="token_subparser", dest="token_subparser"
     )
-    tmp = token_subparser.add_parser("update", help="Add/update ADS API token")
+    tmp = token_subparser.add_parser("add", help="Add/update ADS API token")
     tmp.add_argument("ads_token", help="ADS token to add")
     token_subparser.add_parser("display", help="Display current ADS token")
 
@@ -45,47 +44,53 @@ def main():
         "--verbose", help="True for more output", action="store_true"
     )
 
-    # Report options
-    report_parser.add_argument(
-        "--short", help="True for less columns", action="store_true"
-    )
-
     args = parser.parse_args()
 
-    if args.subcommand == "author":
+    if args.subcommand == "token":
 
-        # Add a user to the database
-        if args.user_subparser == "add":
-            cite_tracker.add_tracked_author()
-
-        # Remove a user from the database
-        elif args.user_subparser == "remove":
-            cite_tracker.remove_tracked_author(args.author_id)
-
-        # Print user list.
-        elif args.user_subparser == "list":
-            cite_tracker.list_tracked_authors()
-
-    elif args.subcommand == "token":
+        db = cite_tracker.Database()
 
         # Set the ADS API token.
-        if args.token_subparser == "update":
-            cite_tracker.update_ads_token(args.ads_token)
+        if args.token_subparser == "add":
+            db.add_ads_token(args.ads_token)
 
         # Display the current ADS API token.
         if args.token_subparser == "display":
-            token = cite_tracker.load_ads_token()
+            token = db.get_ads_token()
             print(f"Currently stored ADS token: {token}")
 
     # Report users current citation statistics
     elif args.subcommand == "report":
-        cite_tracker.report(not args.short)
+        db = cite_tracker.Database()
+        cite_tracker.report(db)
 
     # Check if any new cites have been made to the user since last call
     elif args.subcommand == "check":
-        cite_tracker.check(args.verbose)
+        db = cite_tracker.Database()
+        cite_tracker.check(db, args.verbose)
 
-    # Print some info
-    elif args.subcommand == "info":
-        print(f"myADS version: {myads.__version__}")
-        print(f"databases located at: {cite_tracker.data_dir}")
+    # First time initialization of the database
+    elif args.subcommand == "initialize":
+        db = cite_tracker.Database()
+        db.initialize()
+
+    # Manage tracked authors
+    elif args.subcommand == "author":
+
+        db = cite_tracker.Database()
+
+        # Add a user to the database
+        if args.user_subparser == "add":
+            forename = input("Enter author forename: ")
+            surname = input("Enter author surname: ")
+            orcid = input("Enter author orcid (optional): ")
+
+            db.add_author(forename, surname, orcid)
+
+        # Remove a user from the database
+        elif args.user_subparser == "remove":
+            db.delete_author(args.author_id)
+
+        # Print user list.
+        elif args.user_subparser == "list":
+            db.list_authors()

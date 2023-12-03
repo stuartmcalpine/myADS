@@ -5,6 +5,7 @@ import toml
 from .check import check
 from .report import report
 from .tracked_authors import *
+from .database import Database
 
 # This is where the user database and cite tracker information goes.
 data_dir = os.path.join(os.path.dirname(__file__), "data")
@@ -13,7 +14,7 @@ ADS_TOKEN_PATH = os.path.join(data_dir, ".my_ads_token")
 
 
 def create_data_dir():
-    """ Create the data directory to store author list and cites. """
+    """Create the data directory to store author list and cites."""
     if not os.path.isdir(data_dir):
         os.makedirs(data_dir)
 
@@ -73,6 +74,6 @@ def update_ads_token(token):
 
 
 def get_author_database_path(author_id) -> str:
-    """ Get full path to tracked authors cite tracking database. """
+    """Get full path to tracked authors cite tracking database."""
 
     return os.path.join(data_dir, f"{author_id}_database.toml")
