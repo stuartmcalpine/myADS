@@ -7,7 +7,6 @@ import numpy as np
 
 
 class _ADSPaper:
-
     def __init__(self, data):
         """
         Simple class to hold information about ADS paper
@@ -20,6 +19,7 @@ class _ADSPaper:
 
         for att, v in data.items():
             setattr(self, att, v)
+
 
 class _ADSQuery:
     def __init__(self, q, fl, rows, request_data):
@@ -69,7 +69,7 @@ class _ADSQuery:
 
     @property
     def papers(self):
-        """ 
+        """
         Generator object to loop over each paper and return a _ADSPaper object
         for each.
 
@@ -210,7 +210,9 @@ class _ADSQuery:
                 self.papers_df["years_since_pub"] = self.papers_df["pubdate"].apply(
                     self._years_since_publication
                 )
-                self.papers_dict["years_since_pub"] = list(self.papers_df["years_since_pub"].values)
+                self.papers_dict["years_since_pub"] = list(
+                    self.papers_df["years_since_pub"].values
+                )
 
             # Compute the number of years since publication.
             if (
@@ -348,7 +350,7 @@ class ADSQueryWrapper:
             print(
                 f"Used {self.ads_api_calls} ADS API calls in this instance,",
                 f"{self.ads_api_calls_remaining} more calls can be used today",
-                f"on this token.",
+                "on this token.",
             )
 
     def _encode_string(self, query):
@@ -436,7 +438,7 @@ class ADSQueryWrapper:
 
         # Case where we never got a good reponse from ADS
         if resp.status_code != 200:
-            print(f"Recieved too many bad status codes...")
+            print("Recieved too many bad status codes...")
             return None
 
         # Look at the header to see how many queries we have left.

@@ -84,7 +84,8 @@ def check(db, verbose, rows=2000):
             data = query.get(
                 q=f"first_author:{LAST_NAME},{FIRST_NAME}",
                 fl="title,citation_count,pubdate,bibcode",
-                rows=rows, verbose=verbose
+                rows=rows,
+                verbose=verbose,
             )
         else:
             # Query also using the ORCID.
@@ -92,8 +93,12 @@ def check(db, verbose, rows=2000):
                 f"orcid_pub:{ORCID} OR orcid_user:{ORCID} OR orcid_other:{ORCID} "
                 f"first_author:{LAST_NAME},{FIRST_NAME}"
             )
-            data = query.get(q=q, fl="title,citation_count,pubdate,bibcode", rows=rows,
-                    verbose=verbose)
+            data = query.get(
+                q=q,
+                fl="title,citation_count,pubdate,bibcode",
+                rows=rows,
+                verbose=verbose,
+            )
 
         # Got a bad status code?
         if data is None:
