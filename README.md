@@ -35,8 +35,19 @@ To install from source:
 ``myADS`` can keep track of the citations for multiple authors. Two steps
 before you get started:
 
+* Initialize the database
 * Add your authors you want to track to the database
 * Add your ADS API token to the database
+
+### Initialize the database
+
+The database needs a one time initialization. To do this run
+
+```bash
+myads initialize
+```
+
+which will create a sqlite database at `$HOME/myADS_database.db`.
 
 ### Adding a author to the database
 

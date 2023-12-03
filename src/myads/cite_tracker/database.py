@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from sqlalchemy import (
     Column,
@@ -10,7 +11,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from tabulate import tabulate
 
-_DATABASE = "/home/mcalpine/myADS_database.db"
+home_directory = os.path.expanduser("~")
+_DATABASE = os.path.join(home_directory, "myADS_database.db")
 
 
 # Create a base class for declarative class definitions
