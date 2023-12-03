@@ -6,6 +6,21 @@ import pandas as pd
 import numpy as np
 
 
+class _ADSPaper:
+
+    def __init__(self, data):
+        """
+        Simple class to hold information about ADS paper
+
+        Parameters
+        ----------
+        data : dict
+            Information from self.papers_dict
+        """
+
+        for att, v in data.items():
+            setattr(self, att, v)
+
 class _ADSQuery:
     def __init__(self, q, fl, rows, request_data):
         """
@@ -21,12 +36,11 @@ class _ADSQuery:
             <=1000 characters.
         fl : str
             The list of fields to return. The value should be a comma separated
-            list of field names, e.g. `fl=bibcode,author,title`.
+            list of field names, e.g. `fl="bibcode,author,title"`.
         rows : int
-            The number of results to return. The default is 10 and the maximum
-            is 2000.
+            The number of results to return (maximum from ADS is 2000).
         request_data : `requests` "get" object
-            The data returned from the query from the requests lib
+            The raw data returned from the query from the requests lib
 
         Attributes
         ----------
@@ -39,8 +53,10 @@ class _ADSQuery:
             Query return status
         num_found : int
             Papers found as result from query
-        papers : DataFrame
+        papers_df : DataFrame
             DataFrame storing the query results
+        papers_dict : dict
+            Dict storing the query results
         """
 
         # Store the query info.
@@ -50,6 +66,32 @@ class _ADSQuery:
 
         # Convert the query results into a DataFrame.
         self._parse(request_data)
+
+    @property
+    def papers(self):
+        """ 
+        Generator object to loop over each paper and return a _ADSPaper object
+        for each.
+
+        Example
+        -------
+        for paper in data.papers:
+            print(paper.title)
+
+        Yields
+        ------
+        - : _ADSPaper
+        """
+
+        if not hasattr(self, "papers_dict") or len(self.papers_dict) == 0:
+            return
+            yield
+
+        atts = list(self.papers_dict.keys())
+
+        for i in range(len(self.papers_dict[atts[0]])):
+            tmp = {key: value[i] for (key, value) in self.papers_dict.items()}
+            yield _ADSPaper(tmp)
 
     def _clean_df(self, row):
         """
@@ -87,7 +129,7 @@ class _ADSQuery:
         """
         Ingest the query results into a dataframe.
 
-        Here the `self.papers` DataFrame is created.
+        Here the `self.papers_df` DataFrame is created.
 
         Parameters
         ----------
@@ -116,10 +158,9 @@ class _ADSQuery:
             )
 
         # Loop over each query results and ingest them into a DataFrame
-        self.papers = None
+        self.papers_df = None
         self.papers_dict = {}
         for i in range(len(request_data["response"]["docs"])):
-
             # Add to the dict object.
             for att in self.fl.split(","):
                 if att not in self.papers_dict.keys():
@@ -138,14 +179,14 @@ class _ADSQuery:
                         )
 
             # Add to the dataframe object.
-            if self.papers is None:
-                self.papers = pd.DataFrame(
+            if self.papers_df is None:
+                self.papers_df = pd.DataFrame(
                     self._clean_df(request_data["response"]["docs"][i]), index=[0]
                 )
             else:
-                self.papers = pd.concat(
+                self.papers_df = pd.concat(
                     (
-                        self.papers,
+                        self.papers_df,
                         pd.DataFrame(
                             self._clean_df(request_data["response"]["docs"][i]),
                             index=[0],
@@ -157,30 +198,33 @@ class _ADSQuery:
         # Compute some additional properties
 
         # Compute the URL to the papers ADS page.
-        if self.papers is not None:
-            if "bibcode" in self.papers.columns:
-                self.papers["ads_link"] = self.papers["bibcode"].apply(
+        if self.papers_df is not None:
+            if "bibcode" in self.papers_df.columns:
+                self.papers_df["ads_link"] = self.papers_df["bibcode"].apply(
                     self._generate_ads_link
                 )
-                self.papers_dict["ads_link"] = list(self.papers["ads_link"].values)
+                self.papers_dict["ads_link"] = list(self.papers_df["ads_link"].values)
 
             # Compute the number of years since publication.
-            if "pubdate" in self.papers.columns:
-                self.papers["years_since_pub"] = self.papers["pubdate"].apply(
+            if "pubdate" in self.papers_df.columns:
+                self.papers_df["years_since_pub"] = self.papers_df["pubdate"].apply(
                     self._years_since_publication
                 )
-                self.papers_dict["pubdate"] = list(self.papers["pubdate"].values)
+                self.papers_dict["years_since_pub"] = list(self.papers_df["years_since_pub"].values)
 
             # Compute the number of years since publication.
-            if "pubdate" in self.papers.columns and "citation_count" in self.papers.columns:
-                self.papers["citation_count_per_year"] = self.papers.apply(
+            if (
+                "pubdate" in self.papers_df.columns
+                and "citation_count" in self.papers_df.columns
+            ):
+                self.papers_df["citation_count_per_year"] = self.papers_df.apply(
                     lambda x: self._citations_per_year(
                         x["years_since_pub"], x["citation_count"]
                     ),
                     axis=1,
                 )
-                self.papers_dict["years_since_pub"] = list(
-                    self.papers["years_since_pub"].values
+                self.papers_dict["citation_count_per_year"] = list(
+                    self.papers_df["citation_count_per_year"].values
                 )
 
             # Checks
@@ -238,14 +282,14 @@ class _ADSQuery:
         return diff / 31536000
 
     def _citations_per_year(self, pubyears, num_cites) -> float:
-        """ 
+        """
         Compute the number of cites per year
 
         Parameters
         ----------
         pubyears : float
         num_cites : int
-        
+
         Returns
         -------
         - : float
@@ -259,6 +303,7 @@ class _ADSQuery:
         else:
             return num_cites / pubyears
 
+
 class ADSQueryWrapper:
     def __init__(self, ads_token):
         """
@@ -268,7 +313,7 @@ class ADSQueryWrapper:
         about the query, the reponse from the ADS API, and the result of the query. The
         result of the query is stored in a "paper" list in the _ASDQuery object, for
         which each entry is a list containing information about the papers in the query
-        result. 
+        result.
 
         Parameters
         ----------
@@ -336,7 +381,7 @@ class ADSQueryWrapper:
             The list of fields to return. The value should be a comma separated
             list of field names, e.g. `fl=bibcode,author,title`.
         sort : str, optional
-            The sorting field and direction to be used when returning results. 
+            The sorting field and direction to be used when returning results.
             e.g., `citation_count+desc`
         rows : int, optional
             The number of results to return. The default is 10 and the maximum

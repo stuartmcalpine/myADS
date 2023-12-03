@@ -52,7 +52,7 @@ def _print_new_cites(FIRST_NAME, LAST_NAME, reftitle, new_cites):
     )
 
 
-def check(db, verbose):
+def check(db, verbose, rows=2000):
     """
     Check against each tracked authors' personal database to see if there are
     any new cites to their papers since the last call.

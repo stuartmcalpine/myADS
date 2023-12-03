@@ -48,9 +48,9 @@ def report(db):
         for paper in data.papers:
             tmp = [
                 paper.title,
-                f"{paper.citation_count} ({paper.citations_per_year:.1f})",
+                f"{paper.citation_count} ({paper.citation_count_per_year:.1f})",
                 paper.pubdate,
-                paper.link,
+                paper.ads_link,
             ]
 
             table.append(tmp)
@@ -64,7 +64,7 @@ def report(db):
         maxcolwidths = [50, None, None, None]
 
         # Make a new column combining cite information
-        df = data.papers
+        df = data.papers_df
         df["citation_count_extra"] = df.apply(
             lambda x: f"{x['citation_count']} ({x['citation_count_per_year']:.1f})",
             axis=1,
