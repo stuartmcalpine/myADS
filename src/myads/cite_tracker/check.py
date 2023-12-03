@@ -10,7 +10,7 @@ def _print_new_cites(FIRST_NAME, LAST_NAME, reftitle, new_cites):
     ----------
     database : dict
         Current papers that cited our papers
-    new_cite_papers : dict
+    new_cites : dict
         New papers added to database (the ones we are printing here)
     """
 
@@ -52,7 +52,7 @@ def _print_new_cites(FIRST_NAME, LAST_NAME, reftitle, new_cites):
     )
 
 
-def check(db, verbose):
+def check(db, verbose, rows=2000):
     """
     Check against each tracked authors' personal database to see if there are
     any new cites to their papers since the last call.
@@ -62,6 +62,8 @@ def check(db, verbose):
     db : myADS Database object
     verbose : bool
         True for more output
+    rows : int, optional
+        Max number of rows to return during query
     """
 
     # Query object.
@@ -82,6 +84,8 @@ def check(db, verbose):
             data = query.get(
                 q=f"first_author:{LAST_NAME},{FIRST_NAME}",
                 fl="title,citation_count,pubdate,bibcode",
+                rows=rows,
+                verbose=verbose,
             )
         else:
             # Query also using the ORCID.
@@ -89,13 +93,18 @@ def check(db, verbose):
                 f"orcid_pub:{ORCID} OR orcid_user:{ORCID} OR orcid_other:{ORCID} "
                 f"first_author:{LAST_NAME},{FIRST_NAME}"
             )
-            data = query.get(q=q, fl="title,citation_count,pubdate,bibcode")
+            data = query.get(
+                q=q,
+                fl="title,citation_count,pubdate,bibcode",
+                rows=rows,
+                verbose=verbose,
+            )
 
         # Got a bad status code?
         if data is None:
             return
 
-        if len(data.papers) == 0:
+        if data.num_found == 0:
             print(f"No paper hits for {FIRST_NAME} {LAST_NAME}")
             continue
 

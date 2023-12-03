@@ -1,9 +1,8 @@
 import argparse
 import myads.cite_tracker as cite_tracker
-import myads
+
 
 def main():
-
     # Command line options.
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(title="subcommand", dest="subcommand")
@@ -15,13 +14,13 @@ def main():
         "author", help="Add/remove/list tracked authors in the database"
     )
     token_parser = subparsers.add_parser("token", help="Add/update ADS API token")
-    report_parser = subparsers.add_parser(
+    subparsers.add_parser(
         "report", help="Report current citation statistics for tracked authors"
     )
     check_parser = subparsers.add_parser(
         "check", help="Check for any new cites for tracked authors"
     )
-    
+
     # Author options
     user_subparser = user_parser.add_subparsers(
         title="user_subparser", dest="user_subparser"
@@ -47,7 +46,6 @@ def main():
     args = parser.parse_args()
 
     if args.subcommand == "token":
-
         db = cite_tracker.Database()
 
         # Set the ADS API token.
@@ -76,7 +74,6 @@ def main():
 
     # Manage tracked authors
     elif args.subcommand == "author":
-
         db = cite_tracker.Database()
 
         # Add a user to the database

@@ -14,7 +14,7 @@ if not os.path.isfile(os.path.join(_wd, "myinfo.toml")):
     config = None
 else:
     myinfo = toml.load(os.path.join(_wd, "myinfo.toml"))
-    
+
     config = {
         "_DATABASE_FILE": os.path.join(_wd, "database", "mydatabase.toml"),
         "_FIRST_NAME": myinfo["info"]["first_name"],

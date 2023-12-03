@@ -32,14 +32,14 @@ def report(db):
             )
 
         ret_list = "title,citation_count,pubdate,bibcode"
-        data = query.get(q=q, fl=ret_list)
+        data = query.get(q=q, fl=ret_list, rows=50, sort="pubdate desc")
 
         # Got a bad status code.
         if data is None:
             return
 
         # Found no papers in query.
-        if len(data.papers) == 0:
+        if data.num_found == 0:
             print(f"No paper hits for {FIRST_NAME} {LAST_NAME}")
             continue
 
@@ -48,9 +48,9 @@ def report(db):
         for paper in data.papers:
             tmp = [
                 paper.title,
-                f"{paper.citation_count} ({paper.citations_per_year:.1f})",
+                f"{paper.citation_count} ({paper.citation_count_per_year:.1f})",
                 paper.pubdate,
-                paper.link,
+                paper.ads_link,
             ]
 
             table.append(tmp)
@@ -63,6 +63,20 @@ def report(db):
         ]
         maxcolwidths = [50, None, None, None]
 
+        # Make a new column combining cite information
+        df = data.papers_df
+        df["citation_count_extra"] = df.apply(
+            lambda x: f"{x['citation_count']} ({x['citation_count_per_year']:.1f})",
+            axis=1,
+        )
+
+        # Print the table
         print(
-            tabulate(table, tablefmt="grid", maxcolwidths=maxcolwidths, headers=headers)
+            tabulate(
+                df[["title", "citation_count_extra", "pubdate", "bibcode"]],
+                tablefmt="grid",
+                maxcolwidths=maxcolwidths,
+                showindex="never",
+                headers=headers,
+            )
         )
