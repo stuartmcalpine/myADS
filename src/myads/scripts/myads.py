@@ -42,6 +42,11 @@ def main():
     check_parser.add_argument(
         "--verbose", help="True for more output", action="store_true"
     )
+    check_parser.add_argument(
+        "--show_updates",
+        help="True to show when a cite updates and not just new cites",
+        action="store_true",
+    )
 
     args = parser.parse_args()
 
@@ -65,7 +70,7 @@ def main():
     # Check if any new cites have been made to the user since last call
     elif args.subcommand == "check":
         db = cite_tracker.Database()
-        cite_tracker.check(db, args.verbose)
+        cite_tracker.check(db, args.verbose, args.show_updates)
 
     # First time initialization of the database
     elif args.subcommand == "initialize":

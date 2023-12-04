@@ -2,7 +2,7 @@ from myads.query import ADSQueryWrapper
 from tabulate import tabulate
 
 
-def _print_new_cites(FIRST_NAME, LAST_NAME, reftitle, new_cites):
+def _print_new_cites(FIRST_NAME, LAST_NAME, reftitle, new_cites, updated=False):
     """
     Print any new citations to our papers since last call.
 
@@ -12,17 +12,23 @@ def _print_new_cites(FIRST_NAME, LAST_NAME, reftitle, new_cites):
         Current papers that cited our papers
     new_cites : dict
         New papers added to database (the ones we are printing here)
+    updated : bool
+        True if the cites are updated cites rather than new cites
     """
 
     # Colours for the terminal.
     BOLD = "\033[1m"
-    OKCYAN = "\033[96m"
+    if updated:
+        OKCYAN = "\033[96m"
+    else:
+        OKCYAN = "\033[92m"
     ENDC = "\033[0m"
 
     # The paper we are printing new cites for.
+    mystr = "update" if updated else "new"
     print(
         "\n",
-        f"{BOLD}{OKCYAN}{len(new_cites)} new cite(s) for "
+        f"{BOLD}{OKCYAN}{len(new_cites)} {mystr} cite(s) for "
         f"{reftitle}{ENDC} by {FIRST_NAME} {LAST_NAME}",
     )
 
@@ -32,7 +38,7 @@ def _print_new_cites(FIRST_NAME, LAST_NAME, reftitle, new_cites):
         tmp = []
 
         # The attributes we want to print.
-        for att in ["title", "author", "date", "link"]:
+        for att in ["title", "author", "date", "bibcode"]:
             if hasattr(paper, att):
                 if att == "date":
                     tmp.append(getattr(paper, att)[:10])
@@ -52,7 +58,7 @@ def _print_new_cites(FIRST_NAME, LAST_NAME, reftitle, new_cites):
     )
 
 
-def check(db, verbose, rows=2000):
+def check(db, verbose, show_updates, rows=2000):
     """
     Check against each tracked authors' personal database to see if there are
     any new cites to their papers since the last call.
@@ -62,6 +68,8 @@ def check(db, verbose, rows=2000):
     db : myADS Database object
     verbose : bool
         True for more output
+    show_updates : bool
+        True to also show updated cites, not just new ones
     rows : int, optional
         Max number of rows to return during query
     """
@@ -116,7 +124,14 @@ def check(db, verbose, rows=2000):
                 paper.bibcode, fl="title,bibcode,author,date,doi"
             )
 
-            new_cites = db.check_paper_new_cites(author.id, paper, tmp_query_data)
+            new_cites, updated_cites = db.check_paper_new_cites(
+                author.id, paper, tmp_query_data
+            )
 
             if len(new_cites) > 0:
                 _print_new_cites(FIRST_NAME, LAST_NAME, paper.title, new_cites)
+
+            if show_updates and len(updated_cites) > 0:
+                _print_new_cites(
+                    FIRST_NAME, LAST_NAME, paper.title, updated_cites, updated=True
+                )
