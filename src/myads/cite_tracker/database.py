@@ -142,6 +142,81 @@ class Database:
         else:
             return None
 
+    def _is_pub_in_database(self, author_id: int, bibcode: str, title: str, table):
+        """
+        Is this publication already in the database?
+
+        Parameters
+        ----------
+        author_id : int
+            The author id when table == "Publication", publication_id when
+            table == "ReferencePublication"
+        bibcode : str
+        title : str
+        table : str
+            References the table we are searching, ["ReferencePublication" or
+            "Publication"]
+
+        Returns
+        -------
+        found_butnewtitle : bool
+            True if paper is there, but the title needs updated
+        found_butnewbibcode : bool
+            True if paper is there, but the bibcode needs updated
+        found : bool
+            True if paper is there and up to date
+        """
+
+        found_butnewtitle = False
+        found_butnewbibcode = False
+        found = False
+
+        if table == "Publication":
+            X = Publication
+        elif table == "ReferencePublication":
+            X = ReferencePublication
+        else:
+            raise ValueError()
+
+        # Is publication in database, but the title has changed?
+        query_result = self.session.query(X).filter_by(bibcode=bibcode)
+
+        if table == "Publication":
+            query_result = query_result.filter_by(author_id=author_id).first()
+        else:
+            query_result = query_result.filter_by(publication_id=author_id).first()
+
+        if query_result:
+            if query_result.title != title:
+                found_butnewtitle = True
+                query_result.title = title
+
+        # Is publication in database, but the bibcode has changed?
+        query_result = self.session.query(X).filter_by(title=title)
+
+        if table == "Publication":
+            query_result = query_result.filter_by(author_id=author_id).first()
+        else:
+            query_result = query_result.filter_by(publication_id=author_id).first()
+
+        if query_result:
+            if query_result.bibcode != bibcode:
+                found_butnewbibcode = True
+                query_result.bibcode = bibcode
+
+        # Is the publication in the database
+        query_result = self.session.query(X).filter_by(bibcode=bibcode, title=title)
+
+        if table == "Publication":
+            query_result = query_result.filter_by(author_id=author_id).first()
+        else:
+            query_result = query_result.filter_by(publication_id=author_id).first()
+
+        if query_result:
+            found = True
+
+        return found_butnewtitle, found_butnewbibcode, found
+
     def refresh_author_papers(self, id: int, data):
         """
         Update the publications for a given author.
@@ -157,39 +232,13 @@ class Database:
         """
 
         for paper in data.papers:
-            # Do we already have this publication, but the title has changed?
-            query_result = (
-                self.session.query(Publication)
-                .filter_by(author_id=id, bibcode=paper.bibcode)
-                .first()
+            # Paper already in databae?
+            found_butnewtitle, found_butnewbibcode, found = self._is_pub_in_database(
+                id, paper.bibcode, paper.title, "Publication"
             )
-            if query_result:
-                if query_result.title == paper.title:
-                    continue
-                else:
-                    query_result.title = paper.title
-                    continue
 
-            # Do we already have this publication, but the bibcode has changed?
-            query_result = (
-                self.session.query(Publication)
-                .filter_by(author_id=id, title=paper.title)
-                .first()
-            )
-            if query_result:
-                if query_result.bibcode == paper.bibcode:
-                    continue
-                else:
-                    query_result.bibcode = paper.bibcode
-                    continue
-
-            # Add the new publication for this author
-            query_result = (
-                self.session.query(Publication)
-                .filter_by(author_id=id, bibcode=paper.bibcode, title=paper.title)
-                .first()
-            )
-            if not query_result:
+            # If not, add it
+            if not (found_butnewtitle or found_butnewbibcode) and (not found):
                 self.session.add(
                     Publication(bibcode=paper.bibcode, title=paper.title, author_id=id)
                 )
@@ -200,6 +249,10 @@ class Database:
         """
         Check if a publication has any new cites.
 
+        If a paper that has cited an authors paper has been updated, e.g., a
+        new bibcode, it is treated as a "updated_cite" rather than a
+        "new_cite".
+
         Parameters
         ----------
         id : int
@@ -208,6 +261,11 @@ class Database:
             The publication we are currently checking new cites for
         data : list[myADS paper object]
             Up to date list of papers that site our publication
+
+        Returns
+        -------
+        new_cites : dict
+        updated_cites : dict
         """
 
         # Where is the ref paper in the database
@@ -224,17 +282,18 @@ class Database:
 
         # Loop over each paper that cites this publication and see if any are new
         new_cites = []
+        updated_cites = []
         for paper in data.papers:
-            query_result = (
-                self.session.query(ReferencePublication)
-                .filter_by(
-                    bibcode=paper.bibcode,
-                    title=paper.title,
-                    publication_id=publication_id,
-                )
-                .first()
+            # Paper already in databae?
+            found_butnewtitle, found_butnewbibcode, found = self._is_pub_in_database(
+                publication_id, paper.bibcode, paper.title, "ReferencePublication"
             )
-            if not query_result:
+
+            if found_butnewtitle or found_butnewbibcode:
+                updated_cites.append(paper)
+                continue
+
+            if not found:
                 self.session.add(
                     ReferencePublication(
                         bibcode=paper.bibcode,
@@ -247,4 +306,4 @@ class Database:
 
         self.session.commit()
 
-        return new_cites
+        return new_cites, updated_cites
