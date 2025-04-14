@@ -50,4 +50,7 @@ jobs:
       # Initialize the database
       - name: Initialize database
         run: |
-          myads initialize
+          myads add-author stuart mcalpine --orcid 0000-0000-0000-0000
+          myads list-authors
+          myads add-token 12345667
+          myads remove-author 1
