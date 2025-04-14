@@ -1,126 +1,192 @@
-[![PyPI version](https://badge.fury.io/py/myads.svg)](https://badge.fury.io/py/myads)
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/myads?logo=python)
+# 📚 myADS
 
-# myADS
+`myADS` is a lightweight Python package to **track citations** to your (or others') research papers via the [NASA ADS API](https://ui.adsabs.harvard.edu/).
 
-`myADS` is a simple package to keep track of citations to your (and other
-authors) papers.
+It helps you:
+- 📈 Report an author's **current citation stats**.
+- 🔎 Detect **new** or **updated citations** since the last check.
+- 🧹 Maintain a local, efficient database for fast querying.
 
-It both reports the authors current paper citation metrics, and checks for any
-new cites to the authors papers since the last time of checking.
+---
 
-Once installed you can always run `myads --help` to see a list of available
-commands.
+## 🚀 Installation
 
-## Installation
-
-The easiest method is to install directly from
-[PyPi](https://pypi.org/project/myads/) via:
+Install from [PyPI](https://pypi.org/project/myads/) with:
 
 ```bash
 pip install myads
 ```
 
-### From source
-
-To install from source:
-
-* Clone the repository using ``git clone
-  https://github.com/stuartmcalpine/myADS.git``
-* Navigate to the ``myADS`` folder
-* Install using `pip install .`
-
-## Getting set up
-
-``myADS`` can keep track of the citations for multiple authors. Two steps
-before you get started:
-
-* Initialize the database
-* Add your authors you want to track to the database
-* Add your ADS API token to the database
-
-### Initialize the database
-
-The database needs a one time initialization. To do this run
+Or install from source:
 
 ```bash
-myads initialize
+git clone https://github.com/stuartmcalpine/myADS.git
+cd myADS
+pip install .
 ```
 
-which will create a sqlite database at `$HOME/myADS_database.db`.
+---
 
-### Adding a author to the database
+## 🛠 Getting Started
 
-Once `myADS` is installed you can add the authors you wish to track using:
+No manual database setup needed — it initializes automatically at `$HOME/myADS_database.db` the first time you run a command.
+
+### 1. Add Your ADS API Token
+
+First, get your token [here](https://ui.adsabs.harvard.edu/user/settings/token).
+
+Then add it:
 
 ```bash
-myads author add
+myads add-token YOUR-ADS-API-TOKEN
 ```
 
-You will be prompted to enter a first and last name, and an optional ORCID
-(however it is recommended you add this for each author when possible).
+---
 
-### Removing a author from the database
+### 2. Add Authors to Track
 
-You can remove authors from the tracking database using:
+Add an author by their name:
 
 ```bash
-myads author remove <author id>
+myads add-author "FirstName" "LastName" --orcid ORCID-ID
 ```
 
-You can get a list of author IDs by typing:
+- `--orcid` is optional but highly recommended for accuracy.
+- Example:
 
 ```bash
-myads author list
+myads add-author "Jane" "Doe" --orcid 0000-0002-1825-0097
 ```
 
-### Adding your ADS API token
-
-You must add your [ADS API token](https://ui.adsabs.harvard.edu/help/api/) so
-the package can query on your behalf. 
-
-To add it run:
+You can list authors you've added:
 
 ```bash
-myads token add <YOUR-API-TOKEN-HERE>
+myads list-authors
 ```
 
-## Usage
-
-### Citation reporter
-
-If you run `myads report` you will get a report of all your tracked authors
-current citations, e.g.,
+Remove an author:
 
 ```bash
-Reporting cites for Stuart McAlpine...
-+----------------------------------------------------+--------------+---------------+---------------------+
-| Title                                              | Citations    | Publication   | Bibcode             |
-|                                                    | (per year)   | Date          |                     |
-+====================================================+==============+===============+=====================+
-| Galaxy mergers in EAGLE do not induce a            | 34 (12.0)    | 2020-06-00    | 2020MNRAS.494.5713M |
-| significant amount of black hole growth yet do     |              |               |                     |
-| increase the rate of luminous AGN                  |              |               |                     |
-+----------------------------------------------------+--------------+---------------+---------------------+
+myads remove-author AUTHOR_ID
 ```
 
-### Citation tracker
+(Find `AUTHOR_ID` by listing authors.)
 
-If you run `myads check` it will tell you any papers that have cited your
-tracked authors papers since the last call. 
+---
 
-The first time you run this it will create a local database of your citations.
-From then on it will update the local database with your new cites and report
-the changes, e.g.,
+## 📊 Usage
+
+### Check for New Citations
 
 ```bash
- 1 new cite(s) for Galaxy mergers in EAGLE do not induce a significant amount of black hole growth yet do increase the rate of luminous AGN
-+----------------------------------------+--------------------------------------+------------+---------------------+
-| Title                                  | Authors                              | Date       | Bibcode             |
-+========================================+======================================+============+=====================+
-| The breakBRD Breakdown: Using          | ['Kopenhafer, Claire', 'Starkenburg, | 2020-11-01 | 2020ApJ...903..143K |
-| IllustrisTNG to Track the Quenching of | Tjitske K.', 'Tonnesen, Stephanie',  |            |                     |
-| an Observationally Motivated Sample of | 'Tuttle, Sarah']                     |            |                     |
-| Centrally Star-forming Galaxies        |                                      |            |                     |
-+----------------------------------------+--------------------------------------+------------+---------------------+
+myads check
 ```
+
+- Checks for any **new** or **updated** citations to your tracked papers.
+- You can target a specific author:
+
+```bash
+myads check --author-id 1
+```
+
+- See more detail (including updated citations):
+
+```bash
+myads check --verbose
+```
+
+---
+
+### Generate a Citation Report
+
+```bash
+myads report
+```
+
+- Displays a report with:
+  - 📈 Total citations
+  - 🔥 Recent citations (last 90 days)
+  - 🕒 Citations per year
+  - 📅 Publication date
+  - 📎 Direct ADS links
+
+You can generate a report for a specific author:
+
+```bash
+myads report --author-id 1
+```
+
+---
+
+### Example Output: Citation Report
+
+```
+Citation Report for Jane Doe
+───────────────────────────────────────────────────────────────────────────────
+Title                                Citations (last 90 days) [per year]  Date     ADS Link
+───────────────────────────────────────────────────────────────────────────────
+Galaxy Mergers and Black Hole Growth 52 (5) [10.3]                       2020-06  [link]
+New Dark Matter Clues               10 (9) [45.0]                       2024-01  [link]
+───────────────────────────────────────────────────────────────────────────────
+
+Summary Statistics:
+Total Publications: 2
+Total Citations: 62
+Average Citations per Publication: 31.00
+H-index: 2
+```
+
+---
+
+## 🧩 Command Overview
+
+| Command | Purpose |
+|:--------|:--------|
+| `myads add-author "First" "Last" [--orcid ORCID-ID]` | Add a new author |
+| `myads remove-author AUTHOR_ID` | Remove an author |
+| `myads list-authors` | List all tracked authors |
+| `myads add-token YOUR-TOKEN` | Add or update your ADS API token |
+| `myads check [--author-id ID] [--verbose]` | Check for new/updated citations |
+| `myads report [--author-id ID]` | Generate citation reports |
+
+---
+
+## 📦 How it Works
+
+- **Local Database**: 
+  - `myADS` uses an SQLite database to track publications, citations, and authors.
+  - Efficiently updates and minimizes API calls.
+
+- **Smart Citation Metrics**:
+  - **Recent citations** are based on citing papers **published** in the last 90 days.
+  - **Citations per year** are computed dynamically.
+  - **H-index** is estimated automatically.
+
+- **Automatic Resilience**:
+  - Auto-handles expired ADS tokens.
+  - Auto-creates the database if it doesn't exist.
+
+---
+
+## 🔥 Tips
+
+- Adding ORCIDs increases precision and avoids name ambiguity.
+- Set up a cron job or scheduled task to run `myads check` weekly!
+- You can track multiple authors — perfect for research groups.
+
+---
+
+## 🛡 Disclaimer
+
+This tool queries the NASA/ADS database under fair-use API limits.  
+Make sure you have appropriate permissions and token access.
+
+---
+
+## 🧠 License
+
+MIT License.
+
+---
+
+Made with ❤️ for astronomers and researchers by [Stuart McAlpine](https://github.com/stuartmcalpine).
