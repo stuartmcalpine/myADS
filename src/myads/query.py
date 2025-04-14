@@ -443,20 +443,26 @@ class ADSQueryWrapper:
             try:
                 response = requests.get(url, headers=headers)
                 self.ads_api_calls += 1
-    
+
                 if response.status_code == 200:
-                    self.ads_api_calls_remaining = response.headers.get("X-RateLimit-Remaining")
+                    self.ads_api_calls_remaining = response.headers.get(
+                        "X-RateLimit-Remaining"
+                    )
                     return response
                 elif response.status_code == 401:
-                    raise ValueError("Unauthorized (401): Invalid or expired ADS token.")
+                    raise ValueError(
+                        "Unauthorized (401): Invalid or expired ADS token."
+                    )
                 else:
                     logger.warning(
                         f"Attempt {attempt+1}/{self.max_attempts} failed with status {response.status_code}: {response.text}"
                     )
-    
+
             except requests.RequestException as e:
-                logger.warning(f"Attempt {attempt+1}/{self.max_attempts} failed: {str(e)}")
-    
+                logger.warning(
+                    f"Attempt {attempt+1}/{self.max_attempts} failed: {str(e)}"
+                )
+
         raise RuntimeError(
             f"Failed to get a valid response from ADS API after {self.max_attempts} attempts."
         )

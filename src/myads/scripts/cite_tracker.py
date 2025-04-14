@@ -24,6 +24,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 from rich import box
+from contextlib import contextmanager
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -166,6 +167,19 @@ class CitationTracker:
         # Initialize ADS wrapper
         self._ads_wrapper = None
 
+    @contextmanager
+    def session_scope(self) -> Session:
+        """Provide a transactional scope around a series of operations."""
+        session = self.Session()
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
     def __enter__(self) -> "CitationTracker":
         """Context manager entry."""
         return self
@@ -207,7 +221,7 @@ class CitationTracker:
         token : str
             The ADS API token.
         """
-        with self.Session() as session:
+        with self.session_scope() as session:
             existing_token = session.query(ADSToken).first()
 
             if existing_token:
@@ -231,7 +245,7 @@ class CitationTracker:
         str or None
             The ADS API token if found, None otherwise.
         """
-        with self.Session() as session:
+        with self.session_scope() as session:
             token_record = session.query(ADSToken).first()
             return token_record.token if token_record else None
 
@@ -263,7 +277,7 @@ class CitationTracker:
         IntegrityError
             If there is a database constraint violation.
         """
-        with self.Session() as session:
+        with self.session_scope() as session:
             try:
                 # Check if author already exists
                 existing_author = (
@@ -312,7 +326,7 @@ class CitationTracker:
         bool
             True if successful, False otherwise.
         """
-        with self.Session() as session:
+        with self.session_scope() as session:
             author = session.query(Author).filter_by(id=author_id).first()
 
             if not author:
@@ -332,7 +346,7 @@ class CitationTracker:
 
     def list_authors(self) -> None:
         """Display a table of all tracked authors."""
-        with self.Session() as session:
+        with self.session_scope() as session:
             authors = session.query(Author).all()
 
             if not authors:
@@ -384,7 +398,7 @@ class CitationTracker:
         ValueError
             If the author is not found.
         """
-        with self.Session() as session:
+        with self.session_scope() as session:
             author = session.query(Author).filter_by(id=author_id).first()
 
             if not author:
@@ -495,7 +509,7 @@ class CitationTracker:
         """
         results = {}
 
-        with self.Session() as session:
+        with self.session_scope() as session:
             # Determine which authors to check
             if author_id:
                 authors = session.query(Author).filter_by(id=author_id).all()
@@ -765,7 +779,7 @@ class CitationTracker:
         author_id : int, optional
             ID of a specific author to report on. If None, report on all authors.
         """
-        with self.Session() as session:
+        with self.session_scope() as session:
             # Determine which authors to report on
             if author_id:
                 authors = session.query(Author).filter_by(id=author_id).all()
@@ -810,11 +824,16 @@ class CitationTracker:
             f"\n[bold]Citation Report for [cyan]{author.forename} {author.surname}[/cyan][/bold]"
         )
 
-        table = Table(title="Publications by Citation Count", box=box.ROUNDED)
+        table = Table(
+            title="Publications by Citation Count",
+            box=box.ROUNDED,
+            row_styles=["dim", ""],
+        )
         table.add_column("Title", style="cyan", no_wrap=False)
-        table.add_column("Citations", justify="right", style="green")
+        table.add_column(
+            "Citations\n(last 90 days)\n\[per year]", justify="right", style="green"
+        )
         table.add_column("Date", style="yellow")
-        table.add_column("Recent Citations", justify="right", style="magenta")
         table.add_column("ADS Link", style="blue")
 
         total_citations = 0
@@ -826,12 +845,32 @@ class CitationTracker:
             recent_citations = (
                 session.query(func.count(Citation.id))
                 .filter_by(publication_id=pub.id)
-                .filter(Citation.discovery_date >= ninety_days_ago)
+                .filter(Citation.publication_date.isnot(None))
+                .filter(Citation.publication_date >= ninety_days_ago)
                 .scalar()
             )
 
             # Create ADS link
             ads_link = f"https://ui.adsabs.harvard.edu/abs/{pub.bibcode}/abstract"
+
+            # Calculate years since publication
+            if pub.pubdate:
+                try:
+                    year = int(pub.pubdate.split("-")[0])
+                    month = int(pub.pubdate.split("-")[1]) if "-" in pub.pubdate else 1
+                    pub_date = datetime.datetime(year, month, 1)
+                    years_since_pub = (datetime.datetime.now() - pub_date).days / 365.25
+                    years_since_pub = max(years_since_pub, 1 / 12)
+                except Exception:
+                    years_since_pub = None
+            else:
+                years_since_pub = None
+
+            # Calculate citations per year
+            if years_since_pub:
+                citations_per_year = pub.citation_count / years_since_pub
+            else:
+                citations_per_year = 0.0
 
             # Format title
             title = pub.title
@@ -840,9 +879,8 @@ class CitationTracker:
 
             table.add_row(
                 title,
-                str(pub.citation_count),
+                f"{pub.citation_count} ({recent_citations}) [{citations_per_year:.1f}]",
                 pub.pubdate or "-",
-                str(recent_citations),
                 ads_link,
             )
 
