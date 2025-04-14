@@ -1,500 +1,699 @@
 from urllib.parse import urlencode
 import requests
-
+import logging
 from datetime import datetime
 import pandas as pd
 import numpy as np
+from typing import Dict, List, Optional, Union, Generator, Any, Tuple
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
-class _ADSPaper:
-    def __init__(self, data):
+class ADSPaper:
+    """
+    Represents a single paper from ADS search results.
+    """
+
+    def __init__(self, data: Dict[str, Any]):
         """
-        Simple class to hold information about ADS paper
+        Initialize a paper with attributes from ADS API response.
 
         Parameters
         ----------
-        data : dict
-            Information from self.papers_dict
+        data : Dict[str, Any]
+            Dictionary containing paper attributes
         """
-
         for att, v in data.items():
             setattr(self, att, v)
 
+    def __repr__(self) -> str:
+        """Return a string representation of the paper."""
+        if hasattr(self, "title") and hasattr(self, "bibcode"):
+            return f"Paper({self.bibcode}): {self.title}"
+        elif hasattr(self, "bibcode"):
+            return f"Paper({self.bibcode})"
+        else:
+            return "Paper(Unknown)"
 
-class _ADSQuery:
-    def __init__(self, q, fl, rows, request_data):
+
+class ADSQuery2:
+    """
+    Represents the results of a query to the ADS API.
+    """
+
+    # Class constants
+    ADS_BASE_URL = "https://ui.adsabs.harvard.edu/abs"
+
+    def __init__(
+        self,
+        q: str,
+        fl: str,
+        rows: int,
+        response: requests.Response,
+        suppress_warnings: bool = False,
+    ):
         """
-        Stores the result of an individual query to ADS.
-
-        Not designed to be called standalone, should be called from within the
-        ADSQueryWrapper object.
+        Store and process the result of an ADS API query.
 
         Parameters
         ----------
         q : str
-            The search query. This should be a UTF-8, URL-encoded string of
-            <=1000 characters.
+            The search query string (URL-encoded).
         fl : str
-            The list of fields to return. The value should be a comma separated
-            list of field names, e.g. `fl="bibcode,author,title"`.
+            Comma-separated list of fields to return.
         rows : int
-            The number of results to return (maximum from ADS is 2000).
-        request_data : `requests` "get" object
-            The raw data returned from the query from the requests lib
-
-        Attributes
-        ----------
-        q : str
-        fl : str
-        rows : int
-        query_time : float
-            Execution time of query
-        query_status : int
-            Query return status
-        num_found : int
-            Papers found as result from query
-        papers_df : DataFrame
-            DataFrame storing the query results
-        papers_dict : dict
-            Dict storing the query results
+            Number of results requested.
+        response : requests.Response
+            The response object from the API request.
+        suppress_warnings : bool, optional
+            Whether to suppress pagination warnings, by default False.
+            Useful for citations/references queries where partial results are expected.
         """
-
-        # Store the query info.
+        # Store query parameters
         self.q = q
         self.fl = fl
         self.rows = rows
+        self.suppress_warnings = suppress_warnings
 
-        # Convert the query results into a DataFrame.
-        self._parse(request_data)
+        # Process the response
+        self._parse(response)
+
+    def _parse(self, response: requests.Response) -> None:
+        """
+        Parse the API response and store the results.
+
+        Parameters
+        ----------
+        response : requests.Response
+            The response from the API request.
+
+        Raises
+        ------
+        ValueError
+            If the query status is not 0 (success).
+        """
+        # Parse JSON response
+        data = response.json()
+
+        # Store query metadata
+        header = data["responseHeader"]
+        self.query_time = header["QTime"]
+        self.query_status = header["status"]
+
+        if self.query_status != 0:
+            raise ValueError(f"Query failed with status {self.query_status}")
+
+        # Store result metadata
+        self.num_found = data["response"]["numFound"]
+        docs = data["response"]["docs"]
+
+        # Check if we got all results (but suppress for citations/references)
+        if self.num_found > len(docs) and not self.suppress_warnings:
+            logger.warning(
+                f"Query returns more results than retrieved: {self.num_found} > {self.rows}. "
+                "Consider pagination for complete results."
+            )
+
+        # Process the documents
+        self._process_documents(docs)
+
+
+class ADSQuery:
+    """
+    Represents the results of a query to the ADS API.
+    """
+
+    # Class constants
+    ADS_BASE_URL = "https://ui.adsabs.harvard.edu/abs"
+
+    def __init__(
+        self,
+        q: str,
+        fl: str,
+        rows: int,
+        response: requests.Response,
+        suppress_warnings: bool = False,
+    ):
+        """
+        Store and process the result of an ADS API query.
+
+        Parameters
+        ----------
+        q : str
+            The search query string (URL-encoded).
+        fl : str
+            Comma-separated list of fields to return.
+        rows : int
+            Number of results requested.
+        response : requests.Response
+            The response object from the API request.
+        suppress_warnings : bool, optional
+            Whether to suppress pagination warnings, by default False.
+            Useful for citations/references queries where partial results are expected.
+        """
+        # Store query parameters
+        self.q = q
+        self.fl = fl
+        self.rows = rows
+        self.suppress_warnings = suppress_warnings
+
+        # Process the response
+        self._parse(response)
+
+    def _parse(self, response: requests.Response) -> None:
+        """
+        Parse the API response and store the results.
+
+        Parameters
+        ----------
+        response : requests.Response
+            The response from the API request.
+
+        Raises
+        ------
+        ValueError
+            If the query status is not 0 (success).
+        """
+        # Parse JSON response
+        data = response.json()
+
+        # Store query metadata
+        header = data["responseHeader"]
+        self.query_time = header["QTime"]
+        self.query_status = header["status"]
+
+        if self.query_status != 0:
+            raise ValueError(f"Query failed with status {self.query_status}")
+
+        # Store result metadata
+        self.num_found = data["response"]["numFound"]
+        docs = data["response"]["docs"]
+
+        # Check if we got all results (but suppress for citations/references)
+        if self.num_found > len(docs) and not self.suppress_warnings:
+            logger.warning(
+                f"Query returns more results than retrieved: {self.num_found} > {self.rows}. "
+                "Consider pagination for complete results."
+            )
+
+        # Process the documents
+        self._process_documents(docs)
 
     @property
-    def papers(self):
+    def papers(self) -> Generator[ADSPaper, None, None]:
         """
-        Generator object to loop over each paper and return a _ADSPaper object
-        for each.
-
-        Example
-        -------
-        for paper in data.papers:
-            print(paper.title)
+        Generate ADSPaper objects for each result.
 
         Yields
         ------
-        - : _ADSPaper
+        ADSPaper
+            Object representing a single paper.
         """
-
-        if not hasattr(self, "papers_dict") or len(self.papers_dict) == 0:
+        if not hasattr(self, "papers_dict") or not self.papers_dict:
             return
-            yield
 
         atts = list(self.papers_dict.keys())
 
         for i in range(len(self.papers_dict[atts[0]])):
-            tmp = {key: value[i] for (key, value) in self.papers_dict.items()}
-            yield _ADSPaper(tmp)
+            paper_data = {key: value[i] for key, value in self.papers_dict.items()}
+            yield ADSPaper(paper_data)
 
-    def _clean_df(self, row):
+    def _clean_value(self, value: Any) -> Any:
         """
-        Clean rows before going into the data frame. Need to convert out lists,
-        just take the 1st value. The full array will still be in the
-        `self.papers_dict` dict.
+        Clean values for storage in the papers dictionary.
 
         Parameters
         ----------
-        row : dict
+        value : Any
+            The value to clean.
+
+        Returns
+        -------
+        Any
+            The cleaned value.
         """
+        if isinstance(value, list) and len(value) == 1:
+            return value[0]
+        return value
 
-        for att in self.fl.split(","):
-            if att not in row.keys():
-                row[att] = np.nan
-
-            if type(row[att]) == list:
-                row[att] = row[att][0]
-
-        return row
-
-    def _clean_dict(self, row):
+    def _process_documents(self, docs: List[Dict[str, Any]]) -> None:
         """
-        Clean rows before appending them to the papers_dict. This is just to
-        remove length 1 lists.
-        """
-
-        if type(row) == list:
-            if len(row) == 1:
-                return row[0]
-
-        return row
-
-    def _parse(self, request_data):
-        """
-        Ingest the query results into a dataframe.
-
-        Here the `self.papers_df` DataFrame is created.
+        Process the documents returned by the API.
 
         Parameters
         ----------
-        request_data : `requests` "get" object
-            The data returned from the query from the requests lib
+        docs : List[Dict[str, Any]]
+            The documents returned by the API.
         """
+        # Initialize the dictionary to store results
+        self.papers_dict = {field: [] for field in self.fl.split(",")}
 
-        # Convert to JSON format.
-        request_data = request_data.json()
+        # Process each document
+        rows_for_df = []
+        for doc in docs:
+            # Process for DataFrame
+            row_dict = {}
+            for field in self.fl.split(","):
+                if field in doc:
+                    value = self._clean_value(doc[field])
+                    self.papers_dict[field].append(value)
+                    # For DataFrame, handle lists
+                    row_dict[field] = value if not isinstance(value, list) else value[0]
+                else:
+                    self.papers_dict[field].append(np.nan)
+                    row_dict[field] = np.nan
 
-        # Store some information about the query execution.
-        rheader = request_data["responseHeader"]
-        self.query_time = rheader["QTime"]
-        self.query_status = rheader["status"]
-        assert self.query_status == 0
+            rows_for_df.append(row_dict)
 
-        # Store the result.
-        self.num_found = request_data["response"]["numFound"]
+        # Create DataFrame from all rows at once
+        self.papers_df = pd.DataFrame(rows_for_df) if rows_for_df else None
 
-        # Case where max_rows wasn't big enough.
-        if self.num_found > len(request_data["response"]["docs"]):
-            print(
-                f"Warning: Query {self.q} returns over max rows,"
-                f"({self.num_found} > {self.rows})",
-                "not all papers will be in the list",
+        # Add computed columns
+        self._add_computed_columns()
+
+    def _add_computed_columns(self) -> None:
+        """Add computed columns to the DataFrame and dictionary."""
+        if self.papers_df is None or self.papers_df.empty:
+            return
+
+        # Add ADS link
+        if "bibcode" in self.papers_df.columns:
+            self.papers_df["ads_link"] = self.papers_df["bibcode"].apply(
+                self._generate_ads_link
             )
+            self.papers_dict["ads_link"] = self.papers_df["ads_link"].tolist()
 
-        # Loop over each query results and ingest them into a DataFrame
-        self.papers_df = None
-        self.papers_dict = {}
-        for i in range(len(request_data["response"]["docs"])):
-            # Add to the dict object.
-            for att in self.fl.split(","):
-                if att not in self.papers_dict.keys():
-                    if att not in request_data["response"]["docs"][i].keys():
-                        self.papers_dict[att] = [np.nan]
-                    else:
-                        self.papers_dict[att] = [
-                            self._clean_dict(request_data["response"]["docs"][i][att])
-                        ]
-                else:
-                    if att not in request_data["response"]["docs"][i].keys():
-                        self.papers_dict[att].append(np.nan)
-                    else:
-                        self.papers_dict[att].append(
-                            self._clean_dict(request_data["response"]["docs"][i][att])
-                        )
+        # Add years since publication
+        if "pubdate" in self.papers_df.columns:
+            self.papers_df["years_since_pub"] = self.papers_df["pubdate"].apply(
+                self._years_since_publication
+            )
+            self.papers_dict["years_since_pub"] = self.papers_df[
+                "years_since_pub"
+            ].tolist()
 
-            # Add to the dataframe object.
-            if self.papers_df is None:
-                self.papers_df = pd.DataFrame(
-                    self._clean_df(request_data["response"]["docs"][i]), index=[0]
-                )
-            else:
-                self.papers_df = pd.concat(
-                    (
-                        self.papers_df,
-                        pd.DataFrame(
-                            self._clean_df(request_data["response"]["docs"][i]),
-                            index=[0],
-                        ),
-                    ),
-                    ignore_index=True,
-                )
+        # Add citation count per year
+        if (
+            "pubdate" in self.papers_df.columns
+            and "citation_count" in self.papers_df.columns
+        ):
+            self.papers_df["citation_count_per_year"] = self.papers_df.apply(
+                lambda x: self._citations_per_year(
+                    x["years_since_pub"], x["citation_count"]
+                ),
+                axis=1,
+            )
+            self.papers_dict["citation_count_per_year"] = self.papers_df[
+                "citation_count_per_year"
+            ].tolist()
 
-        # Compute some additional properties
+        # Validate dictionary
+        self._validate_dict_lengths()
 
-        # Compute the URL to the papers ADS page.
-        if self.papers_df is not None:
-            if "bibcode" in self.papers_df.columns:
-                self.papers_df["ads_link"] = self.papers_df["bibcode"].apply(
-                    self._generate_ads_link
-                )
-                self.papers_dict["ads_link"] = list(self.papers_df["ads_link"].values)
-
-            # Compute the number of years since publication.
-            if "pubdate" in self.papers_df.columns:
-                self.papers_df["years_since_pub"] = self.papers_df["pubdate"].apply(
-                    self._years_since_publication
-                )
-                self.papers_dict["years_since_pub"] = list(
-                    self.papers_df["years_since_pub"].values
-                )
-
-            # Compute the number of years since publication.
-            if (
-                "pubdate" in self.papers_df.columns
-                and "citation_count" in self.papers_df.columns
-            ):
-                self.papers_df["citation_count_per_year"] = self.papers_df.apply(
-                    lambda x: self._citations_per_year(
-                        x["years_since_pub"], x["citation_count"]
-                    ),
-                    axis=1,
-                )
-                self.papers_dict["citation_count_per_year"] = list(
-                    self.papers_df["citation_count_per_year"].values
-                )
-
-            # Checks
-            count = None
-            for att in self.papers_dict.keys():
-                if count is None:
-                    count = len(self.papers_dict[att])
-                else:
-                    if len(self.papers_dict[att]) != count:
-                        raise ValueError(f"Array {att} has a bad length")
-
-    def _generate_ads_link(self, bibcode) -> str:
+    def _validate_dict_lengths(self) -> None:
         """
-        Generate the ADS link from the bibcode
+        Ensure all lists in the papers_dict have the same length.
+
+        Raises
+        ------
+        ValueError
+            If any list has a different length.
+        """
+        if not self.papers_dict:
+            return
+
+        lengths = {key: len(value) for key, value in self.papers_dict.items()}
+        if len(set(lengths.values())) > 1:
+            problematic = {
+                k: v for k, v in lengths.items() if v != list(lengths.values())[0]
+            }
+            raise ValueError(f"Inconsistent array lengths: {problematic}")
+
+    def _generate_ads_link(self, bibcode: str) -> str:
+        """
+        Generate the ADS webpage link for a paper.
 
         Parameters
         ----------
         bibcode : str
+            The paper's bibcode.
 
         Returns
         -------
-        uri : str
+        str
+            URL to the paper's ADS page.
         """
+        return f"{self.ADS_BASE_URL}/{bibcode}/abstract"
 
-        uri = f"https://ui.adsabs.harvard.edu/abs/{bibcode}/abstract"
-
-        return uri
-
-    def _years_since_publication(self, pubdate) -> float:
+    def _years_since_publication(self, pubdate: str) -> float:
         """
-        Return the number of years from a given pubdate.
+        Calculate years elapsed since publication.
 
         Parameters
         ----------
         pubdate : str
+            The publication date in format 'YYYY-MM'.
 
         Returns
         -------
-        diff : float
-            Total number of years since pubdate
+        float
+            Number of years since publication.
         """
+        try:
+            # Parse the publication date
+            year = int(pubdate.split("-")[0])
+            month = int(pubdate.split("-")[1])
+            if month == 0:
+                month = 1
 
-        # Convert pubdate string to datetime.
-        pubyear = int(pubdate.split("-")[0])
-        pubmonth = int(pubdate.split("-")[1])
-        if pubmonth == 0:
-            pubmonth += 1
-        dt = f"{pubyear}-{pubmonth}"
+            pub_datetime = datetime.strptime(f"{year}-{month:02d}", "%Y-%m")
 
-        # Compute time difference from now.
-        diff = datetime.now() - datetime.strptime(dt, "%Y-%m")
-        diff = diff.total_seconds()
+            # Calculate difference
+            diff = (datetime.now() - pub_datetime).total_seconds()
+            return diff / 31536000  # seconds in a year
+        except (ValueError, IndexError, TypeError):
+            logger.warning(f"Could not parse publication date: {pubdate}")
+            return np.nan
 
-        # Convert to years.
-        return diff / 31536000
-
-    def _citations_per_year(self, pubyears, num_cites) -> float:
+    def _citations_per_year(self, years_since_pub: float, citation_count: int) -> float:
         """
-        Compute the number of cites per year
+        Calculate citations per year for a paper.
 
         Parameters
         ----------
-        pubyears : float
-        num_cites : int
+        years_since_pub : float
+            Years since publication.
+        citation_count : int
+            Total number of citations.
 
         Returns
         -------
-        - : float
-            The number of cites per year (pubyears/num_cites)
+        float
+            Citations per year.
         """
-
-        if (pubyears is None) or (num_cites is None):
-            return None
-        elif pubyears <= 1 / 12:
+        if pd.isna(years_since_pub) or pd.isna(citation_count):
+            return np.nan
+        elif years_since_pub <= 1 / 12:  # Less than a month old
             return 0.0
         else:
-            return num_cites / pubyears
+            return citation_count / years_since_pub
 
 
 class ADSQueryWrapper:
-    def __init__(self, ads_token):
-        """
-        Class that wraps calls to the ADS API to make easy queries.
+    """
+    Wrapper class for the ADS API.
 
-        Each method returns a _ADSQuery object, which contains information
-        about the query, the reponse from the ADS API, and the result of the query. The
-        result of the query is stored in a "paper" list in the _ASDQuery object, for
-        which each entry is a list containing information about the papers in the query
-        result.
+    Provides methods to easily query the ADS API and retrieve results.
+    """
+
+    # Class constants
+    API_URL = "https://api.adsabs.harvard.edu/v1/search/query"
+    MAX_ROWS_PER_QUERY = 2000
+
+    def __init__(self, ads_token: str, max_attempts: int = 3):
+        """
+        Initialize the ADS API wrapper.
 
         Parameters
         ----------
         ads_token : str
-
-        Methods
-        -------
-        get(...)
-            Perform a generic query to the ADS API
-        citations(...)
-            Query the ADS API to return all cites to a given paper
-        references(...)
-            Query the ADS API to return all references within a given paper
+            Your ADS API token.
+        max_attempts : int, optional
+            Maximum number of attempts for failed requests, by default 3.
         """
-
-        # ADS API token.
         self.token = ads_token
-
-        # Log how many ADS API calls this object has used in this session.
+        self.max_attempts = max_attempts
         self.ads_api_calls = 0
-
-        # Log how many ADS API calls remaining on our token today.
         self.ads_api_calls_remaining = None
 
     def __del__(self):
-        """
-        On program end, report how many ADS API calls were used during this
-        ADSQuery object instance. We are interested in this because the number
-        of API calls to ADS has a daily limit of 5000.
-        """
+        """Log API usage information when the object is destroyed."""
         if self.ads_api_calls > 0:
-            print(
-                f"Used {self.ads_api_calls} ADS API calls in this instance,",
-                f"{self.ads_api_calls_remaining} more calls can be used today",
-                "on this token.",
+            logger.info(
+                f"Used {self.ads_api_calls} ADS API calls in this instance, "
+                f"{self.ads_api_calls_remaining} calls remaining today."
             )
 
-    def _encode_string(self, query):
+    def _safe_request(self, url: str, headers: Dict[str, str]) -> requests.Response:
         """
-        Encode query dict into a string.
-
-        Needs to include "q", the query, and "fl" the fields you want returned.
-
-        Paramaters
-        ----------
-        query : dict
-
-        Example
-        -------
-        query = {"q": "author:McAlpine,Stuart", "fl": "citation_count", "rows": 20}
+        Perform a safe API request, handling common errors like 401 Unauthorized.
         """
+        for attempt in range(self.max_attempts):
+            try:
+                response = requests.get(url, headers=headers)
+                self.ads_api_calls += 1
+    
+                if response.status_code == 200:
+                    self.ads_api_calls_remaining = response.headers.get("X-RateLimit-Remaining")
+                    return response
+                elif response.status_code == 401:
+                    raise ValueError("Unauthorized (401): Invalid or expired ADS token.")
+                else:
+                    logger.warning(
+                        f"Attempt {attempt+1}/{self.max_attempts} failed with status {response.status_code}: {response.text}"
+                    )
+    
+            except requests.RequestException as e:
+                logger.warning(f"Attempt {attempt+1}/{self.max_attempts} failed: {str(e)}")
+    
+        raise RuntimeError(
+            f"Failed to get a valid response from ADS API after {self.max_attempts} attempts."
+        )
 
-        return urlencode(query)
-
-    def get(self, q, fl, sort=None, rows=10, max_attempts=3, verbose=False):
+    def get_all_results(
+        self,
+        q: str,
+        fl: str,
+        sort: Optional[str] = None,
+        max_results: Optional[int] = None,
+    ) -> List[ADSQuery]:
         """
-        Perform generic query using the ADS API.
+        Retrieve all results for a query using pagination.
 
         Parameters
         ----------
         q : str
-            The search query. This should be a UTF-8, URL-encoded string of
-            <=1000 characters.
+            The search query string.
         fl : str
-            The list of fields to return. The value should be a comma separated
-            list of field names, e.g. `fl=bibcode,author,title`.
+            Comma-separated list of fields to return.
         sort : str, optional
-            The sorting field and direction to be used when returning results.
-            e.g., `citation_count+desc`
-        rows : int, optional
-            The number of results to return. The default is 10 and the maximum
-            is 2000.
-        max_attempts : int, optional
-            How many times do we try before we give up?
-        verbose : bool, optional
-            True for more output
+            Sort field and direction.
+        max_results : int, optional
+            Maximum number of results to retrieve.
 
         Returns
         -------
-        - : _ADSQuery object
-            Object stores all information about query and the result
+        List[ADSQuery]
+            List of query result objects, one per page.
         """
+        results = []
+        page = 1
+        rows = min(self.MAX_ROWS_PER_QUERY, max_results or self.MAX_ROWS_PER_QUERY)
+        total_retrieved = 0
 
-        # Can't go above max rows
-        if rows > 2000:
-            raise ValueError("Maximum allowed number of rows for 1 query is 2000")
+        # Get first page to determine total results
+        first_query = self.get(q, fl, sort, rows, page)
+        results.append(first_query)
+        total_retrieved += len(first_query.papers_dict.get(fl.split(",")[0], []))
 
-        # Build query dict.
-        query = {"q": q, "fl": fl, "rows": rows}
+        # Get total count
+        total_results = first_query.num_found
+        if max_results is not None:
+            total_results = min(total_results, max_results)
 
-        # Add sorting options
-        if sort is not None:
-            query["sort"] = sort
+        # Continue pagination if needed
+        while total_retrieved < total_results:
+            page += 1
+            rows_to_get = min(rows, total_results - total_retrieved)
 
-        # Convert query dict to string.
-        if verbose:
-            print(f"Query dict: {q}")
-        q = self._encode_string(query)
-        if verbose:
-            print(f"Query str: {q}")
-        url = f"https://api.adsabs.harvard.edu/v1/search/query?{q}"
+            query = self.get(q, fl, sort, rows_to_get, page)
+            results.append(query)
 
-        # Need authorization token in header.
-        headers = {"Authorization": f"Bearer:{self.token}"}
+            retrieved = len(query.papers_dict.get(fl.split(",")[0], []))
+            total_retrieved += retrieved
 
-        # Make get request.
-        for i in range(max_attempts):
-            resp = requests.get(url, headers=headers)
-            self.ads_api_calls += 1
-
-            # Check status code.
-            if resp.status_code != 200:
-                print(
-                    f"Attempt {i+1} recieved status code ",
-                    f"{resp.status_code} from ADS, trying again...",
-                )
-                continue
-            else:
+            # Break if we got fewer results than requested (end of results)
+            if retrieved < rows_to_get:
                 break
 
-        # Case where we never got a good reponse from ADS
-        if resp.status_code != 200:
-            print("Recieved too many bad status codes...")
-            return None
+        return results
 
-        # Look at the header to see how many queries we have left.
-        self.ads_api_calls_remaining = resp.headers["X-RateLimit-Remaining"]
-
-        return _ADSQuery(q, fl, rows, resp)
-
-    def citations(self, bibcode, fl="title,bibcode,author,citation_count", rows=2000):
+    def get(
+        self,
+        q: str,
+        fl: str,
+        sort: Optional[str] = None,
+        rows: int = 10,
+        page: int = 1,
+        verbose: bool = False,
+        suppress_warnings: bool = False,
+    ) -> ADSQuery:
         """
-        Query what papers cite a paper of a given bibcode.
+        Perform a generic query to the ADS API.
+
+        Parameters
+        ----------
+        q : str
+            The search query string.
+        fl : str
+            Comma-separated list of fields to return.
+        sort : str, optional
+            Sort field and direction, e.g. "citation_count desc".
+        rows : int, optional
+            Number of results to return, by default 10.
+        page : int, optional
+            Page number for pagination, by default 1.
+        verbose : bool, optional
+            Whether to print verbose output, by default False.
+        suppress_warnings : bool, optional
+            Whether to suppress pagination warnings, by default False.
+
+        Returns
+        -------
+        ADSQuery
+            Object containing query results.
+
+        Raises
+        ------
+        ValueError
+            If rows exceeds the maximum allowed.
+        RuntimeError
+            If all API request attempts fail.
+        """
+        # Check rows limit
+        if rows > self.MAX_ROWS_PER_QUERY:
+            raise ValueError(f"Maximum allowed rows is {self.MAX_ROWS_PER_QUERY}")
+
+        # Build query parameters
+        params = {"q": q, "fl": fl, "rows": rows, "start": (page - 1) * rows}
+        if sort:
+            params["sort"] = sort
+
+        # Log query if verbose
+        if verbose:
+            logger.info(f"Query: {params}")
+
+        # Encode and build URL
+        query_string = urlencode(params)
+        url = f"{self.API_URL}?{query_string}"
+
+        # Set up headers with auth token
+        headers = {"Authorization": f"Bearer {self.token}"}
+
+        # Make request with retries
+        for attempt in range(self.max_attempts):
+            try:
+                response = self._safe_request(url, headers)
+                self.ads_api_calls += 1
+
+                # Check response status
+                if response.status_code == 200:
+                    # Update API calls remaining
+                    self.ads_api_calls_remaining = response.headers.get(
+                        "X-RateLimit-Remaining"
+                    )
+                    return ADSQuery(query_string, fl, rows, response, suppress_warnings)
+                else:
+                    logger.warning(
+                        f"Attempt {attempt+1}/{self.max_attempts} failed with status "
+                        f"{response.status_code}: {response.text}"
+                    )
+            except requests.RequestException as e:
+                logger.warning(
+                    f"Attempt {attempt+1}/{self.max_attempts} failed: {str(e)}"
+                )
+
+        # If we get here, all attempts failed
+        raise RuntimeError(
+            f"Failed to get response from ADS API after {self.max_attempts} attempts"
+        )
+
+    def citations(
+        self,
+        bibcode: str,
+        fl: str = "title,bibcode,author,citation_count",
+        rows: int = 2000,
+    ) -> ADSQuery:
+        """
+        Find papers that cite a specific paper.
 
         Parameters
         ----------
         bibcode : str
-            The bibcode of the paper we want to know who cites
+            Bibcode of the paper to find citations for.
         fl : str, optional
-            Properties to return from query
+            Fields to return.
         rows : int, optional
-            Max number of rows to return
+            Maximum number of results.
 
         Returns
         -------
-        - : _ADSQuery object
-            Object stores all information about query and the result
+        ADSQuery
+            Query results containing citing papers.
         """
+        if not isinstance(bibcode, str):
+            raise TypeError("bibcode must be a string")
 
-        # Make sure bibcode is a string.
-        assert type(bibcode) == str
+        query = f"citations(bibcode:{bibcode})"
+        # Pass suppress_warnings=True to avoid pagination warnings for citations
+        return self.get(query, fl, rows=rows, suppress_warnings=True)
 
-        q = f"citations(bibcode:{bibcode})"
+    def references(
+        self,
+        bibcode: str,
+        fl: str = "title,bibcode,author,citation_count",
+        rows: int = 2000,
+    ) -> ADSQuery:
+        """
+        Find references cited by a specific paper.
 
-        return self.get(q, fl, rows=rows)
+        Parameters
+        ----------
+        bibcode : str
+            Bibcode of the paper to find references for.
+        fl : str, optional
+            Fields to return.
+        rows : int, optional
+            Maximum number of results.
 
+        Returns
+        -------
+        ADSQuery
+            Query results containing referenced papers.
+        """
+        if not isinstance(bibcode, str):
+            raise TypeError("bibcode must be a string")
 
-#    def references(self, bibcode, fl="title,bibcode,author,citation_count", rows=2000):
-#        """
-#        Query what references a paper contains.
-#
-#        Parameters
-#        ----------
-#        bibcode : str
-#            The bibcode of the paper we want to know who cites
-#        fl : str, optional
-#            Properties to return from query
-#        rows : int, optional
-#            Max number of rows to return
-#
-#        Returns
-#        -------
-#        - : _ADSQuery object
-#            Object stores all information about query and the result
-#        """
-#
-#        # Make sure bibcode is a string.
-#        assert type(bibcode) == str
-#
-#        q = f"references(bibcode:{bibcode})"
-#
-#        return self.get(q, fl, rows=rows)
+        query = f"references(bibcode:{bibcode})"
+        # Pass suppress_warnings=True to avoid pagination warnings for references
+        return self.get(query, fl, rows=rows, suppress_warnings=True)
+
+    def search_author(
+        self,
+        author: str,
+        fl: str = "title,bibcode,author,citation_count,pubdate",
+        sort: str = "citation_count desc",
+        rows: int = 100,
+    ) -> ADSQuery:
+        """
+        Search for papers by a specific author.
+
+        Parameters
+        ----------
+        author : str
+            Author name in "LastName, FirstName" format.
+        fl : str, optional
+            Fields to return.
+        sort : str, optional
+            Sort order.
+        rows : int, optional
+            Maximum number of results.
+
+        Returns
+        -------
+        ADSQuery
+            Query results containing author's papers.
+        """
+        query = f'author:"{author}"'
+        return self.get(query, fl, sort=sort, rows=rows)
