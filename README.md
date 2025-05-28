@@ -1,17 +1,15 @@
-# 📚 myADS
+# myADS
 
-`myADS` is a lightweight Python package to **track citations** to your (or others') research papers via the [NASA ADS API](https://ui.adsabs.harvard.edu/).
+myADS is a lightweight Python package to track citations to your (or others') research papers via the NASA ADS API.
 
 It helps you:
-- 📈 Report an author's **current citation stats**.
-- 🔎 Detect **new** or **updated citations** since the last check.
-- 🧹 Maintain a local, efficient database for fast querying.
+- Report an author's current citation stats
+- Detect new or updated citations since the last check
+- Maintain a local, efficient database for fast querying
 
----
+## Installation
 
-## 🚀 Installation
-
-Install from [PyPI](https://pypi.org/project/myads/) with:
+Install from PyPI with:
 
 ```bash
 pip install myads
@@ -25,11 +23,9 @@ cd myADS
 pip install .
 ```
 
----
+## Getting Started
 
-## 🛠 Getting Started
-
-No manual database setup needed — it initializes automatically at `$HOME/myADS_database.db` the first time you run a command.
+No manual database setup needed — it initializes automatically at $HOME/myADS_database.db the first time you run a command.
 
 ### 1. Add Your ADS API Token
 
@@ -41,8 +37,6 @@ Then add it:
 myads add-token YOUR-ADS-API-TOKEN
 ```
 
----
-
 ### 2. Add Authors to Track
 
 Add an author by their name:
@@ -51,7 +45,7 @@ Add an author by their name:
 myads add-author "FirstName" "LastName" --orcid ORCID-ID
 ```
 
-- `--orcid` is optional but highly recommended for accuracy.
+- `--orcid` is optional but highly recommended for accuracy
 - Example:
 
 ```bash
@@ -70,11 +64,9 @@ Remove an author:
 myads remove-author AUTHOR_ID
 ```
 
-(Find `AUTHOR_ID` by listing authors.)
+(Find AUTHOR_ID by listing authors.)
 
----
-
-## 📊 Usage
+## Usage
 
 ### Check for New Citations
 
@@ -82,7 +74,7 @@ myads remove-author AUTHOR_ID
 myads check
 ```
 
-- Checks for any **new** or **updated** citations to your tracked papers.
+- Checks for any new or updated citations to your tracked papers
 - You can target a specific author:
 
 ```bash
@@ -95,8 +87,6 @@ myads check --author-id 1
 myads check --verbose
 ```
 
----
-
 ### Generate a Citation Report
 
 ```bash
@@ -104,19 +94,17 @@ myads report
 ```
 
 - Displays a report with:
-  - 📈 Total citations
-  - 🔥 Recent citations (last 90 days)
-  - 🕒 Citations per year
-  - 📅 Publication date
-  - 📎 Direct ADS links
+  - Total citations
+  - Recent citations (last 90 days)
+  - Citations per year
+  - Publication date
+  - Direct ADS links
 
 You can generate a report for a specific author:
 
 ```bash
 myads report --author-id 1
 ```
-
----
 
 ### Example Output: Citation Report
 
@@ -136,57 +124,45 @@ Average Citations per Publication: 31.00
 H-index: 2
 ```
 
----
-
-## 🧩 Command Overview
+## Command Overview
 
 | Command | Purpose |
 |:--------|:--------|
-| `myads add-author "First" "Last" [--orcid ORCID-ID]` | Add a new author |
-| `myads remove-author AUTHOR_ID` | Remove an author |
-| `myads list-authors` | List all tracked authors |
-| `myads add-token YOUR-TOKEN` | Add or update your ADS API token |
-| `myads check [--author-id ID] [--verbose]` | Check for new/updated citations |
-| `myads report [--author-id ID]` | Generate citation reports |
+| myads add-author "First" "Last" [--orcid ORCID-ID] | Add a new author |
+| myads remove-author AUTHOR_ID | Remove an author |
+| myads list-authors | List all tracked authors |
+| myads add-token YOUR-TOKEN | Add or update your ADS API token |
+| myads check [--author-id ID] [--verbose] | Check for new/updated citations |
+| myads report [--author-id ID] | Generate citation reports |
 
----
+## How it Works
 
-## 📦 How it Works
+**Local Database**: 
+myADS uses an SQLite database to track publications, citations, and authors. This approach efficiently updates data and minimizes API calls.
 
-- **Local Database**: 
-  - `myADS` uses an SQLite database to track publications, citations, and authors.
-  - Efficiently updates and minimizes API calls.
+**Smart Citation Metrics**:
+- Recent citations are based on citing papers published in the last 90 days
+- Citations per year are computed dynamically
+- H-index is estimated automatically
 
-- **Smart Citation Metrics**:
-  - **Recent citations** are based on citing papers **published** in the last 90 days.
-  - **Citations per year** are computed dynamically.
-  - **H-index** is estimated automatically.
+**Automatic Resilience**:
+- Auto-handles expired ADS tokens
+- Auto-creates the database if it doesn't exist
 
-- **Automatic Resilience**:
-  - Auto-handles expired ADS tokens.
-  - Auto-creates the database if it doesn't exist.
+## Tips
 
----
+- Adding ORCIDs increases precision and avoids name ambiguity
+- Set up a cron job or scheduled task to run `myads check` weekly
+- You can track multiple authors — perfect for research groups
 
-## 🔥 Tips
+## Disclaimer
 
-- Adding ORCIDs increases precision and avoids name ambiguity.
-- Set up a cron job or scheduled task to run `myads check` weekly!
-- You can track multiple authors — perfect for research groups.
+This tool queries the NASA/ADS database under fair-use API limits. Make sure you have appropriate permissions and token access.
 
----
-
-## 🛡 Disclaimer
-
-This tool queries the NASA/ADS database under fair-use API limits.  
-Make sure you have appropriate permissions and token access.
-
----
-
-## 🧠 License
+## License
 
 MIT License.
 
 ---
 
-Made with ❤️ for astronomers and researchers by [Stuart McAlpine](https://github.com/stuartmcalpine).
+Made for astronomers and researchers by [Stuart McAlpine](https://github.com/stuartmcalpine).
