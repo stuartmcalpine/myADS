@@ -24,6 +24,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 from rich import box
+from rich.prompt import Confirm # Added import
 from contextlib import contextmanager
 
 # Set up logging
@@ -230,7 +231,7 @@ class CitationTracker:
             else:
                 session.add(ADSToken(token=token))
 
-            session.commit()
+            # session.commit() is handled by session_scope
             self.console.print(f"[green]ADS token updated successfully.[/green]")
 
         # Reset the ADS wrapper to use the new token
@@ -299,7 +300,8 @@ class CitationTracker:
                     orcid=orcid,
                 )
                 session.add(author)
-                session.commit()
+                # session.commit() will be called by session_scope, need to flush to get ID
+                session.flush() 
 
                 self.console.print(
                     f"[green]Added author {forename} {surname} (ID: {author.id}).[/green]"
@@ -307,7 +309,7 @@ class CitationTracker:
                 return author.id
 
             except IntegrityError as e:
-                session.rollback()
+                # session.rollback() handled by session_scope
                 logger.error(f"Database error adding author: {e}")
                 self.console.print(f"[red]Error adding author: {e}[/red]")
                 raise
@@ -337,7 +339,7 @@ class CitationTracker:
 
             author_name = f"{author.forename} {author.surname}"
             session.delete(author)
-            session.commit()
+            # session.commit() handled by session_scope
 
             self.console.print(
                 f"[green]Removed author {author_name} and all associated data.[/green]"
@@ -379,32 +381,23 @@ class CitationTracker:
         self, author_id: int, max_rows: int = 2000
     ) -> List[Publication]:
         """
-        Fetch publications for an author from ADS.
-
-        Parameters
-        ----------
-        author_id : int
-            ID of the author to fetch publications for.
-        max_rows : int, optional
-            Maximum number of publications to fetch.
-
-        Returns
-        -------
-        List[Publication]
-            List of publications for the author.
-
-        Raises
-        ------
-        ValueError
-            If the author is not found.
+        Fetch publications for an author from ADS, update local DB,
+        and optionally remove local-only entries.
         """
         with self.session_scope() as session:
             author = session.query(Author).filter_by(id=author_id).first()
 
             if not author:
+                self.console.print(f"[yellow]No author found with ID {author_id} for fetching publications.[/yellow]")
                 raise ValueError(f"No author found with ID {author_id}")
 
-            # Build the query string
+            # 1. Get locally stored publications for this author BEFORE fetching from ADS
+            local_pubs_before_fetch = (
+                session.query(Publication).filter_by(author_id=author.id).all()
+            )
+            local_bibcodes_before_fetch = {p.bibcode for p in local_pubs_before_fetch}
+
+            # Build the ADS query string
             if author.orcid:
                 q = (
                     f"orcid_pub:{author.orcid} OR orcid_user:{author.orcid} OR "
@@ -412,30 +405,90 @@ class CitationTracker:
                 )
             else:
                 q = f'first_author:"{author.surname}, {author.forename}"'
-
-            # Fields to retrieve
+            
             fl = "title,bibcode,author,citation_count,pubdate"
 
             # Query ADS
-            data = self.ads_wrapper.get(
+            ads_api_results = self.ads_wrapper.get(
                 q=q, fl=fl, rows=max_rows, sort="pubdate desc", verbose=False
             )
 
-            if data is None or data.num_found == 0:
+            current_ads_papers_list = [] # List of ADSPaper objects
+            ads_bibcodes_from_api = set()
+
+            if ads_api_results and ads_api_results.papers:
+                try:
+                    # Consume the generator from ads_api_results.papers if it is one
+                    current_ads_papers_list = list(ads_api_results.papers)
+                    ads_bibcodes_from_api = {p.bibcode for p in current_ads_papers_list if hasattr(p, 'bibcode')}
+                except TypeError: # If it's already a list or not a generator
+                    if ads_api_results.papers: # Ensure it's not None
+                         current_ads_papers_list = ads_api_results.papers
+                         ads_bibcodes_from_api = {p.bibcode for p in current_ads_papers_list if hasattr(p, 'bibcode')}
+
+
+            if not ads_api_results or ads_api_results.num_found == 0:
                 self.console.print(
-                    f"[yellow]No publications found for {author.forename} {author.surname}.[/yellow]"
+                    f"[yellow]No publications found in ADS for {author.forename} {author.surname}.[/yellow]"
                 )
-                return []
+                # If ADS returns nothing, all local papers for this author are candidates for removal.
 
-            session.commit()
+            # 2. Identify local publications not found in current ADS results
+            bibcodes_to_check_for_removal = local_bibcodes_before_fetch - ads_bibcodes_from_api
 
-            return self._update_publications(session, author, data)
+            if bibcodes_to_check_for_removal:
+                self.console.print(
+                    f"\n[bold yellow]Checking for local publications not found in current ADS results for {author.forename} {author.surname}:[/bold yellow]"
+                )
+                for bibcode_to_remove in bibcodes_to_check_for_removal:
+                    pub_to_remove = next(
+                        (p for p in local_pubs_before_fetch if p.bibcode == bibcode_to_remove), None
+                    )
+                    if pub_to_remove:
+                        display_title = pub_to_remove.title
+                        if len(display_title) > 70:
+                            display_title = display_title[:67] + "..."
+                        
+                        self.console.print(f"Local entry: [cyan]{display_title}[/cyan] (Bibcode: {pub_to_remove.bibcode})")
+                        
+                        if not self.console.is_interactive:
+                            self.console.print(
+                                "[yellow]Non-interactive mode. Skipping removal prompt. Entry will be kept.[/yellow]"
+                            )
+                            continue # Skip to the next bibcode to check
+
+                        confirmation = Confirm.ask(
+                            f"This entry was not found in the latest ADS results for this author. Remove it from your local database?",
+                            default=False, # Default to No for safety
+                        )
+                        if confirmation:
+                            self.console.print(
+                                f"[red]Removing {pub_to_remove.bibcode} ('{display_title}') from local database.[/red]"
+                            )
+                            session.delete(pub_to_remove)
+                        else:
+                            self.console.print(
+                                f"[green]Keeping {pub_to_remove.bibcode} ('{display_title}') in local database.[/green]"
+                            )
+            
+            # 3. Update local database with current ADS publications
+            # This will add new papers from ADS or update existing ones.
+            self._update_publications(session, author, current_ads_papers_list)
+
+            # session.commit() is handled by the session_scope context manager.
+            
+            # Return the final list of publications for this author from the DB
+            # after potential removals, updates, and additions.
+            final_author_pubs_in_db = (
+                session.query(Publication).filter_by(author_id=author.id).all()
+            )
+            return final_author_pubs_in_db
 
     def _update_publications(
-        self, session: Session, author: Author, data: ADSQuery
+        self, session: Session, author: Author, current_ads_papers: List[ADSPaper]
     ) -> List[Publication]:
         """
-        Update the publications for an author in the database.
+        Update the publications for an author in the database based on a list of ADSPaper objects.
 
         Parameters
         ----------
@@ -443,46 +496,48 @@ class CitationTracker:
             SQLAlchemy session.
         author : Author
             Author object.
-        data : ADSQuery
-            Query results from ADS API.
+        current_ads_papers : List[ADSPaper]
+            List of ADSPaper objects fetched from ADS.
 
         Returns
         -------
         List[Publication]
-            List of updated or new publications.
+            List of updated or new SQLAlchemy Publication objects.
         """
-        updated_pubs = []
+        updated_sqlalchemy_pubs = []
 
-        for paper in data.papers:
+        for paper_obj in current_ads_papers:  # paper_obj is an ADSPaper instance
             # Check if publication exists
             pub = (
                 session.query(Publication)
-                .filter_by(bibcode=paper.bibcode, author_id=author.id)
+                .filter_by(bibcode=paper_obj.bibcode, author_id=author.id)
                 .first()
             )
 
             if pub:
                 # Update existing publication
-                pub.title = paper.title
-                pub.citation_count = getattr(paper, "citation_count", 0)
-                pub.pubdate = getattr(paper, "pubdate", None)
+                pub.title = paper_obj.title
+                # Ensure citation_count is an int, default to 0 if not present or None
+                pub.citation_count = int(getattr(paper_obj, "citation_count", 0) or 0)
+                pub.pubdate = getattr(paper_obj, "pubdate", None)
                 pub.last_updated = datetime.datetime.now()
             else:
                 # Add new publication
                 pub = Publication(
-                    bibcode=paper.bibcode,
-                    title=paper.title,
-                    pubdate=getattr(paper, "pubdate", None),
-                    citation_count=getattr(paper, "citation_count", 0),
+                    bibcode=paper_obj.bibcode,
+                    title=paper_obj.title,
+                    pubdate=getattr(paper_obj, "pubdate", None),
+                    # Ensure citation_count is an int, default to 0 if not present or None
+                    citation_count=int(getattr(paper_obj, "citation_count", 0) or 0),
                     author_id=author.id,
                     last_updated=datetime.datetime.now(),
                 )
                 session.add(pub)
-
-            updated_pubs.append(pub)
-
-        session.commit()
-        return updated_pubs
+            
+            updated_sqlalchemy_pubs.append(pub)
+        
+        # session.commit() is handled by session_scope in the calling function
+        return updated_sqlalchemy_pubs
 
     def check_citations(
         self,
@@ -529,10 +584,12 @@ class CitationTracker:
                     f"Checking citations for [cyan]{author.forename} {author.surname}[/cyan]..."
                 )
 
-                # Refresh author's publications first
+                # Refresh author's publications first. This includes removal logic.
+                # The database will be updated by fetch_author_publications.
                 self.fetch_author_publications(author.id, max_rows)
 
-                # Get the updated publications
+                # Get the updated publications list from the current session
+                # This list reflects changes made by fetch_author_publications
                 publications = (
                     session.query(Publication).filter_by(author_id=author.id).all()
                 )
@@ -541,8 +598,8 @@ class CitationTracker:
                 for pub in publications:
                     citation_data = self.ads_wrapper.citations(
                         pub.bibcode,
-                        fl="title,bibcode,author,date,doi,citation_count",
-                        rows=max_rows,
+                        fl="title,bibcode,author,date,doi,citation_count", # 'date' for pubdate of citing paper
+                        rows=max_rows, # Use max_rows for citations as well
                     )
 
                     if citation_data and citation_data.num_found > 0:
@@ -561,7 +618,7 @@ class CitationTracker:
             # Display the results
             self._display_citation_results(session, results, verbose)
 
-            session.commit()
+            # session.commit() handled by session_scope
 
         return results
 
@@ -587,8 +644,15 @@ class CitationTracker:
         """
         new_citations = []
         updated_citations = []
-
-        for paper in citation_data.papers:
+        
+        # Get all bibcodes of citing papers from the ADS response
+        # Ensure papers_dict and 'bibcode' key exist
+        citing_bibcodes_from_ads = []
+        if hasattr(citation_data, 'papers_dict') and citation_data.papers_dict and 'bibcode' in citation_data.papers_dict:
+             citing_bibcodes_from_ads = citation_data.papers_dict.get("bibcode", [])
+        
+        # Iterate through ADSPaper objects for detailed processing
+        for paper in citation_data.papers: # ADSPaper objects
             # Check if citation exists
             citation = (
                 session.query(Citation)
@@ -604,32 +668,35 @@ class CitationTracker:
                     citation.title = paper.title
                     updated = True
 
-                if hasattr(paper, "author") and str(citation.authors) != str(
-                    paper.author
-                ):
-                    citation.authors = str(paper.author)
+                # ADS paper.author is already a list of strings or a single string.
+                # Ensure local citation.authors is comparable or consistently stored.
+                # Storing as string is fine.
+                ads_authors_str = str(getattr(paper, "author", []))
+                if citation.authors != ads_authors_str:
+                    citation.authors = ads_authors_str
+                    updated = True
+                
+                # 'date' field from ADS for citing paper's publication date
+                ads_pub_date = getattr(paper, "date", None) 
+                if citation.publication_date != ads_pub_date:
+                    citation.publication_date = ads_pub_date
                     updated = True
 
-                if hasattr(paper, "date") and citation.publication_date != paper.date:
-                    citation.publication_date = paper.date
+                ads_doi_val = getattr(paper, "doi", None)
+                if isinstance(ads_doi_val, list): # Handle if DOI is a list
+                    ads_doi_str = ";".join(ads_doi_val)
+                else:
+                    ads_doi_str = ads_doi_val
+
+                if citation.doi != ads_doi_str:
+                    citation.doi = ads_doi_str
                     updated = True
-
-                if hasattr(paper, "doi"):
-                    doi_value = paper.doi
-                    # Convert list to string if needed
-                    if isinstance(doi_value, list):
-                        doi_value = ";".join(doi_value)
-
-                    if citation.doi != doi_value:
-                        citation.doi = doi_value
-                        updated = True
 
                 if updated:
                     updated_citations.append(citation)
             else:
                 # Create new citation
                 doi_value = getattr(paper, "doi", None)
-                # Convert list of DOIs to a string by joining with a separator
                 if isinstance(doi_value, list):
                     doi_value = ";".join(doi_value)
 
@@ -637,26 +704,27 @@ class CitationTracker:
                     bibcode=paper.bibcode,
                     title=paper.title,
                     authors=str(getattr(paper, "author", [])),
-                    publication_date=getattr(paper, "date", None),
-                    doi=doi_value,  # Now this will be a string
+                    publication_date=getattr(paper, "date", None), # 'date' from ADS
+                    doi=doi_value,
                     publication_id=publication.id,
                     discovery_date=datetime.datetime.now(),
                 )
                 session.add(citation)
                 new_citations.append(citation)
 
-        # Update the publication's citation count
-        publication.citation_count = len(citation_data.papers_dict.get("bibcode", []))
+        # Update the publication's citation count based on the number of citing papers found
+        # Use num_found for total, or len of the list of bibcodes if that's more representative of what's processed
+        publication.citation_count = citation_data.num_found 
         publication.last_updated = datetime.datetime.now()
 
-        session.commit()
+        # session.commit() handled by session_scope
         return CitationUpdate(
             new_citations=new_citations, updated_citations=updated_citations
         )
 
     def _display_citation_results(
         self,
-        session,
+        session, # Keep session if needed for querying author name, though it's passed in results now
         results: Dict[int, Dict[str, CitationUpdate]],
         verbose: bool = False,
     ) -> None:
@@ -665,6 +733,8 @@ class CitationTracker:
 
         Parameters
         ----------
+        session : Session
+            SQLAlchemy session, used to query author names.
         results : Dict[int, Dict[str, CitationUpdate]]
             Results from check_citations.
         verbose : bool, optional
@@ -677,6 +747,7 @@ class CitationTracker:
         for author_id, author_results in results.items():
             author = session.query(Author).filter_by(id=author_id).first()
             if not author:
+                logger.warning(f"Author with ID {author_id} not found for displaying results.")
                 continue
 
             author_name = f"{author.forename} {author.surname}"
@@ -689,13 +760,19 @@ class CitationTracker:
                 )
 
                 if not publication:
+                    logger.warning(f"Publication with bibcode {bibcode} for author ID {author_id} not found.")
                     continue
+                
+                pub_title_display = publication.title
+                if len(pub_title_display) > 70:
+                     pub_title_display = pub_title_display[:67] + "..."
+
 
                 # Display new citations
                 if citation_update.new_citations:
                     self._print_citation_table(
                         author_name,
-                        publication.title,
+                        pub_title_display,
                         citation_update.new_citations,
                         "New",
                     )
@@ -704,7 +781,7 @@ class CitationTracker:
                 if verbose and citation_update.updated_citations:
                     self._print_citation_table(
                         author_name,
-                        publication.title,
+                        pub_title_display,
                         citation_update.updated_citations,
                         "Updated",
                     )
@@ -735,38 +812,50 @@ class CitationTracker:
         self.console.print(
             f"\n[bold {title_color}]{citation_type} citations for paper by {author_name}:[/bold {title_color}]"
         )
-        self.console.print(f"[yellow]Title:[/yellow] {publication_title}")
+        self.console.print(f"[yellow]Original Paper Title:[/yellow] {publication_title}")
 
-        table = Table(box=box.ROUNDED)
-        table.add_column("Title", style="cyan", no_wrap=False)
-        table.add_column("Authors", style="green", no_wrap=False)
-        table.add_column("Date", style="yellow")
-        table.add_column("Link", style="blue")
+        table = Table(box=box.ROUNDED, title=f"{citation_type} Citing Papers")
+        table.add_column("Citing Paper Title", style="cyan", no_wrap=False, max_width=60)
+        table.add_column("Citing Authors", style="green", no_wrap=False, max_width=40)
+        table.add_column("Citing Date", style="yellow")
+        table.add_column("ADS Link", style="blue", no_wrap=True)
 
         for citation in citations:
             # Truncate title if too long
             title = citation.title
-            if len(title) > 60:
-                title = title[:57] + "..."
+            if len(title) > 55: # Adjusted for max_width
+                title = title[:52] + "..."
 
             # Format authors
-            authors = citation.authors
-            if authors and len(authors) > 50:
-                # Get first author and indicate there are more
-                if isinstance(authors, str) and "," in authors:
-                    authors = authors.split(",")[0] + ", et al."
-                else:
-                    authors = str(authors)[:47] + "..."
+            authors_str = citation.authors
+            if authors_str:
+                # Try to get first author + et al. if it's a list-like string
+                if authors_str.startswith('[') and 'et al.' not in authors_str:
+                    try:
+                        # Attempt to parse if it looks like a list of authors
+                        authors_list = eval(authors_str) # Be cautious with eval
+                        if isinstance(authors_list, list) and len(authors_list) > 1:
+                            authors_str = f"{authors_list[0]}, et al."
+                        elif isinstance(authors_list, list) and len(authors_list) == 1:
+                            authors_str = authors_list[0]
+                    except: # Fallback if eval fails or not a list
+                        pass # Keep original authors_str
+                
+                if len(authors_str) > 35: # Adjusted for max_width
+                     authors_str = authors_str[:32] + "..."
+            else:
+                authors_str = "-"
+
 
             # Create ADS link
             ads_link = f"https://ui.adsabs.harvard.edu/abs/{citation.bibcode}/abstract"
 
             # Format date
             date = citation.publication_date
-            if date and len(date) > 10:
+            if date and len(date) > 10: # Assuming YYYY-MM-DD or YYYY-MM
                 date = date[:10]
 
-            table.add_row(title, authors, date or "-", ads_link)
+            table.add_row(title, authors_str, date or "-", ads_link)
 
         self.console.print(table)
 
@@ -829,62 +918,115 @@ class CitationTracker:
             box=box.ROUNDED,
             row_styles=["dim", ""],
         )
-        table.add_column("Title", style="cyan", no_wrap=False)
+        table.add_column("Title", style="cyan", no_wrap=False, max_width=60)
         table.add_column(
-            "Citations\n(last 90 days)\n\[per year]", justify="right", style="green"
+            "Citations\n(last 90 days)\n[per year]", justify="right", style="green"  # Corrected: removed '\' before '['
         )
-        table.add_column("Date", style="yellow")
-        table.add_column("ADS Link", style="blue")
+        table.add_column("Pub Date", style="yellow") # Renamed column for clarity
+        table.add_column("ADS Link", style="blue", no_wrap=True)
 
         total_citations = 0
         total_publications = len(publications)
 
         for pub in publications:
-            # Get recent citations (last 90 days)
-            ninety_days_ago = datetime.datetime.now() - datetime.timedelta(days=90)
-            recent_citations = (
-                session.query(func.count(Citation.id))
-                .filter_by(publication_id=pub.id)
-                .filter(Citation.publication_date.isnot(None))
-                .filter(Citation.publication_date >= ninety_days_ago)
-                .scalar()
-            )
+            # Get recent citations (last 90 days based on citing paper's publication_date)
+            ninety_days_ago_str = (datetime.datetime.now() - datetime.timedelta(days=90)).strftime('%Y-%m-%d')
+            
+            recent_citations = 0
+            # Query citations linked to this publication
+            citing_papers = session.query(Citation).filter_by(publication_id=pub.id).all()
+            for citing_paper in citing_papers:
+                try:
+                    # Check if citing_paper.publication_date is not None and is a valid date string
+                    if citing_paper.publication_date:
+                        # ADS 'date' field can be YYYY-MM, YYYY-MM-DD, or YYYY-MM-DDTHH:MM:SSZ
+                        # Get the date part by splitting at 'T'
+                        date_only_str = citing_paper.publication_date.split('T')[0]
+                        
+                        citing_paper_date_parts = date_only_str.split('-')
+                        citing_year = int(citing_paper_date_parts[0])
+                        
+                        # Default month to 1 if not present or 0
+                        citing_month = 1
+                        if len(citing_paper_date_parts) > 1:
+                            month_val = int(citing_paper_date_parts[1])
+                            citing_month = month_val if month_val != 0 else 1
+                        
+                        # Default day to 1 if not present or 0
+                        citing_day = 1
+                        if len(citing_paper_date_parts) > 2:
+                            day_val = int(citing_paper_date_parts[2])
+                            citing_day = day_val if day_val != 0 else 1
+                        
+                        citing_date_obj = datetime.datetime(citing_year, citing_month, citing_day)
+                        ninety_days_ago_obj = datetime.datetime.strptime(ninety_days_ago_str, '%Y-%m-%d')
+
+                        if citing_date_obj >= ninety_days_ago_obj:
+                            recent_citations +=1
+                except (ValueError, IndexError, TypeError) as e:
+                    logger.debug(f"Could not parse date '{citing_paper.publication_date}' for recent citation check: {e}")
+                    pass # Skip if date is invalid or not present
+
 
             # Create ADS link
             ads_link = f"https://ui.adsabs.harvard.edu/abs/{pub.bibcode}/abstract"
 
-            # Calculate years since publication
+            # Calculate years since publication (of the original paper)
+            years_since_pub = None # Default to None
             if pub.pubdate:
                 try:
-                    year = int(pub.pubdate.split("-")[0])
-                    month = int(pub.pubdate.split("-")[1]) if "-" in pub.pubdate else 1
-                    pub_date = datetime.datetime(year, month, 1)
-                    years_since_pub = (datetime.datetime.now() - pub_date).days / 365.25
-                    years_since_pub = max(years_since_pub, 1 / 12)
-                except Exception:
-                    years_since_pub = None
-            else:
-                years_since_pub = None
+                    # Remove time part if present (though less common for pub.pubdate)
+                    date_part = pub.pubdate.split('T')[0] 
+                    pub_date_parts = date_part.split("-")
+                    
+                    year = int(pub_date_parts[0])
+                    
+                    month = 1 # Default month to January
+                    if len(pub_date_parts) > 1:
+                        month_val = int(pub_date_parts[1])
+                        month = month_val if month_val != 0 else 1 # Default 00 to 1
+                    
+                    day = 1 # Default day to 1st
+                    if len(pub_date_parts) > 2:
+                        day_val = int(pub_date_parts[2])
+                        day = day_val if day_val != 0 else 1 # Default 00 to 1
+                    
+                    pub_datetime_obj = datetime.datetime(year, month, day)
+                    # Ensure years_since_pub is at least a small fraction for very recent papers
+                    years_since_pub = max((datetime.datetime.now() - pub_datetime_obj).days / 365.25, 1/12.0) 
+                except (ValueError, IndexError, TypeError) as e:
+                    logger.debug(f"Could not parse pubdate '{pub.pubdate}' for years_since_pub calculation: {e}")
+                    years_since_pub = None # Indicate it couldn't be calculated
+            
+            citations_per_year_str = "-"
+            if years_since_pub is not None and pub.citation_count is not None:
+                if years_since_pub > 0 : # Avoid division by zero
+                    citations_per_year = pub.citation_count / years_since_pub
+                    citations_per_year_str = f"{citations_per_year:.1f}"
+                elif pub.citation_count > 0: # Many citations in less than a month (or if years_since_pub is near 0)
+                     # Estimate for papers less than a month old but with citations
+                     if years_since_pub < (1/12.0) and years_since_pub > 0:
+                         citations_per_year_str = f"{pub.citation_count / years_since_pub:.1f}*" # Extrapolated
+                     else: # If years_since_pub is exactly 0 (should be caught by max) or negative (error)
+                         citations_per_year_str = "N/A"
+                else: # No citations or years_since_pub is 0 and no citations
+                    citations_per_year_str = "0.0"
 
-            # Calculate citations per year
-            if years_since_pub:
-                citations_per_year = pub.citation_count / years_since_pub
-            else:
-                citations_per_year = 0.0
 
             # Format title
-            title = pub.title
-            if len(title) > 60:
-                title = title[:57] + "..."
+            title_display = pub.title
+            if len(title_display) > 55: 
+                title_display = title_display[:52] + "..."
 
             table.add_row(
-                title,
-                f"{pub.citation_count} ({recent_citations}) [{citations_per_year:.1f}]",
+                title_display,
+                f"{pub.citation_count or 0} ({recent_citations}) [{citations_per_year_str}]",
                 pub.pubdate or "-",
                 ads_link,
             )
 
-            total_citations += pub.citation_count
+            if pub.citation_count: 
+                total_citations += pub.citation_count
 
         self.console.print(table)
 
@@ -894,24 +1036,23 @@ class CitationTracker:
         self.console.print(f"Total Citations: [green]{total_citations}[/green]")
 
         if total_publications > 0:
-            avg_citations = total_citations / total_publications
+            avg_citations = total_citations / total_publications if total_citations > 0 else 0.0
             self.console.print(
                 f"Average Citations per Publication: [green]{avg_citations:.2f}[/green]"
             )
 
             # H-index calculation
             citation_counts = sorted(
-                [p.citation_count for p in publications], reverse=True
+                [p.citation_count or 0 for p in publications], reverse=True 
             )
             h_index = 0
-            for i, citations in enumerate(citation_counts, 1):
-                if citations >= i:
-                    h_index = i
+            for i, count_val in enumerate(citation_counts):
+                if count_val >= (i + 1):
+                    h_index = i + 1
                 else:
                     break
 
             self.console.print(f"H-index: [green]{h_index}[/green]")
-
 
 # Command-line interface functions
 
@@ -959,7 +1100,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="ADS Citation Tracker")
-    subparsers = parser.add_subparsers(dest="command", help="Command to run")
+    subparsers = parser.add_subparsers(dest="command", help="Command to run", required=True)
 
     # Add author command
     add_author_parser = subparsers.add_parser(
@@ -988,10 +1129,10 @@ def main():
         "--author-id", type=int, help="Author ID to check (default: all authors)"
     )
     check_parser.add_argument(
-        "--max-rows", type=int, default=2000, help="Maximum rows to return"
+        "--max-rows", type=int, default=2000, help="Maximum rows to return per query for publications and citations"
     )
     check_parser.add_argument(
-        "--verbose", action="store_true", help="Show detailed output"
+        "--verbose", action="store_true", help="Show detailed output for updated citations"
     )
 
     # Generate report command
@@ -1004,6 +1145,9 @@ def main():
     args = parser.parse_args()
 
     # Create tracker
+    # Configure logging for the application if desired
+    logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO").upper())
+        
     tracker = CitationTracker()
 
     # Run command
@@ -1019,8 +1163,7 @@ def main():
         check_citations_cli(tracker, vars(args))
     elif args.command == "report":
         generate_report_cli(tracker, vars(args))
-    else:
-        parser.print_help()
+    # No 'else' needed due to 'required=True' in subparsers
 
 
 if __name__ == "__main__":
