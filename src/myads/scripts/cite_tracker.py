@@ -513,12 +513,16 @@ class CitationTracker:
                 .filter_by(bibcode=paper_obj.bibcode, author_id=author.id)
                 .first()
             )
+    
+            try:
+                cite_count = int(getattr(paper_obj, "citation_count", 0) or 0)
+            except:
+                cite_count = 0
 
             if pub:
                 # Update existing publication
                 pub.title = paper_obj.title
-                # Ensure citation_count is an int, default to 0 if not present or None
-                pub.citation_count = int(getattr(paper_obj, "citation_count", 0) or 0)
+                pub.citation_count = cite_count
                 pub.pubdate = getattr(paper_obj, "pubdate", None)
                 pub.last_updated = datetime.datetime.now()
             else:
@@ -527,8 +531,7 @@ class CitationTracker:
                     bibcode=paper_obj.bibcode,
                     title=paper_obj.title,
                     pubdate=getattr(paper_obj, "pubdate", None),
-                    # Ensure citation_count is an int, default to 0 if not present or None
-                    citation_count=int(getattr(paper_obj, "citation_count", 0) or 0),
+                    citation_count=cite_count,
                     author_id=author.id,
                     last_updated=datetime.datetime.now(),
                 )
