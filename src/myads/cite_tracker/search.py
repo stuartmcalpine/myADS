@@ -70,8 +70,8 @@ class SearchManager:
         
         if orcid:
             q = (
-                f"orcid_pub:{orcid} OR orcid_user:{orcid} OR "
-                f'orcid_other:{orcid} OR {author_field}:"{surname}, {forename}"'
+                f"(orcid_pub:{orcid} OR orcid_user:{orcid} OR "
+                f'orcid_other:{orcid}) AND {author_field}:"{surname}, {forename}"'
             )
         else:
             q = f'{author_field}:"{surname}, {forename}"'
