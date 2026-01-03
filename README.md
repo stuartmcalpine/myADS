@@ -235,6 +235,68 @@ Default tracking behavior depends on ORCID: with ORCID, myADS tracks papers at a
 - Set up a cron job or scheduled task to run `myads check` weekly
 - You can track multiple authors — perfect for research groups
 
+## Troubleshooting
+
+### Database Location
+
+By default, myADS stores its database at:
+- `~/.local/share/myads/database.db` (XDG spec, recommended)
+- `~/myADS_database.db` (legacy location, if it already exists)
+
+**Customize location:**
+```bash
+# Using environment variable
+export MYADS_DATABASE_PATH=/custom/path/myads.db
+myads check
+
+# Using command-line flag
+myads --db-path /custom/path/myads.db check
+```
+
+**For development:**
+```bash
+pip install -e ".[dev]"  # Install with dev dependencies
+pip install -e ".[viz]"  # Install with visualization dependencies for notebooks
+```
+
+### No Publications Found
+
+If `myads check` or `myads search` returns no results:
+
+**With ORCID:**
+- Verify your ORCID is correct on [orcid.org](https://orcid.org)
+- Check that ADS has linked your ORCID to your papers
+- Verify name spelling matches ADS records
+- Try `--deep` to find papers without ORCID metadata
+
+**Without ORCID:**
+- Only first-author papers are tracked by default
+- Add an ORCID for better coverage
+- Use `--deep` to search all author positions
+- Check name spelling and format (e.g., "Last, First")
+
+### Paper Removal Prompts
+
+During `myads check`, you may be prompted to remove papers not found in current ADS results.
+
+**Common causes:**
+- Author metadata corrected in ADS (name spelling changed)
+- ORCID associations updated or removed
+- Paper retracted or moved to different collection
+- Your search criteria changed (e.g., added ORCID)
+
+**What to do:**
+- Answer 'n' to keep the paper if you know it's yours
+- Use `myads ignore <pub_id>` to keep but exclude from tracking
+- Answer 'y' to remove if it was incorrectly added
+
+### Rate Limits
+
+ADS API has daily rate limits. If you hit the limit:
+- Reduce `--max-rows` to fetch fewer results
+- Wait 24 hours for limit reset
+- Check remaining calls: the tool displays this after each run
+
 ## Disclaimer
 
 This tool queries the NASA/ADS database under fair-use API limits. Make sure you have appropriate permissions and token access.

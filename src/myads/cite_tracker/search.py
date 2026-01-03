@@ -94,9 +94,18 @@ class SearchManager:
             return None
 
         if not results or results.num_found == 0:
-            self.console.print(
-                f"[yellow]No publications found for {forename} {surname}.[/yellow]"
-            )
+            msg = f"[yellow]No publications found for {forename} {surname}."
+            if orcid:
+                msg += f"\nSearched: ORCID {orcid} AND {author_field}:\"{surname}, {forename}\"."
+                msg += "\nTry: Verify ORCID is correct, check name spelling, or search without ORCID."
+            else:
+                msg += f"\nSearched: {author_field}:\"{surname}, {forename}\"."
+                if first_author_only:
+                    msg += "\nTry: Remove --first-author-only to search all author positions, or check name spelling."
+                else:
+                    msg += "\nTry: Check name spelling or verify the author has publications in ADS."
+            msg += "[/yellow]"
+            self.console.print(msg)
             return None
 
         self.console.print(f"[green]Found {results.num_found} publication(s).[/green]\n")

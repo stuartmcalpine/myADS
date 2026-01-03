@@ -33,5 +33,19 @@ myads = "myads.scripts.cite_tracker:main"
 homepage = "https://github.com/stuartmcalpine/myADS"
 repository = "https://github.com/stuartmcalpine/myADS"
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+]
+viz = [
+    "matplotlib>=3.5",
+    "seaborn>=0.12",
+    "wordcloud>=1.8",
+]
+
 [tool.setuptools.dynamic]
 version = {attr = "myads._version.__version__"}

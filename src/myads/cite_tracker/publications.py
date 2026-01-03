@@ -327,9 +327,15 @@ class PublicationManager:
                     }
 
         if not ads_api_results or ads_api_results.num_found == 0:
-            self.console.print(
-                f"[yellow]No publications found in ADS for {author.forename} {author.surname}.[/yellow]"
-            )
+            msg = f"[yellow]No publications found in ADS for {author.forename} {author.surname}."
+            if author.orcid:
+                msg += f"\nSearched: ORCID {author.orcid} OR first author by name."
+                msg += "\nTry: Verify ORCID is correct, check name spelling, or use --deep to search all author positions."
+            else:
+                msg += f"\nSearched: First author papers by name only."
+                msg += "\nTry: Add an ORCID for better results, check name spelling, or use --deep to search all author positions."
+            msg += "[/yellow]"
+            self.console.print(msg)
 
         # Identify local publications not found in current ADS results
         bibcodes_to_check_for_removal = (
@@ -364,8 +370,13 @@ class PublicationManager:
                         )
                         continue
 
+                    # Explain why this might happen before asking
+                    self.console.print(
+                        "[dim]Common reasons: Author metadata corrected in ADS, ORCID updated, or paper retracted.[/dim]"
+                    )
+
                     confirmation = Confirm.ask(
-                        f"This entry was not found in the latest ADS results for this author. Remove it from your local database?",
+                        f"Paper not found in latest ADS results. Remove from local database?",
                         default=False,
                     )
                     if confirmation:
@@ -420,7 +431,9 @@ class PublicationManager:
 
         if not name_only_results or name_only_results.num_found == 0:
             self.console.print(
-                "[yellow]No additional papers found in deep check.[/yellow]"
+                f"[yellow]No additional papers found in deep check.\n"
+                f"Searched: author:\"{author.surname}, {author.forename}\" (any author position by name).\n"
+                f"This means either all your papers are already tracked, or name spelling doesn't match ADS records.[/yellow]"
             )
             return
 

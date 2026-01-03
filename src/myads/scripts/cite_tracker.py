@@ -94,6 +94,10 @@ def search_cli(tracker: CitationTracker, args: Dict[str, Any]) -> None:
 def main():
     """Main entry point for the citation tracker CLI."""
     parser = argparse.ArgumentParser(description="ADS Citation Tracker")
+    parser.add_argument(
+        "--db-path",
+        help="Path to database file (default: $MYADS_DATABASE_PATH or ~/.local/share/myads/database.db)",
+    )
     subparsers = parser.add_subparsers(
         dest="command", help="Command to run", required=True
     )
@@ -235,8 +239,8 @@ def main():
     # Configure logging
     logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO").upper())
 
-    # Create tracker
-    tracker = CitationTracker()
+    # Create tracker with optional custom database path
+    tracker = CitationTracker(database_path=args.db_path)
 
     # Run command
     command_map = {
