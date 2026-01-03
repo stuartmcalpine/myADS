@@ -255,8 +255,14 @@ myads --db-path /custom/path/myads.db check
 
 **For development:**
 ```bash
-pip install -e ".[dev]"  # Install with dev dependencies
+pip install -e ".[dev]"  # Install with dev dependencies (pytest, black, ruff, mypy)
 pip install -e ".[viz]"  # Install with visualization dependencies for notebooks
+```
+
+**Running tests:**
+```bash
+pytest tests/        # Run all tests
+pytest tests/ -v     # Verbose output
 ```
 
 ### No Publications Found

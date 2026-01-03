@@ -3,3 +3,7 @@ src/myads/cite_tracker/data/*
 *.egg-info*
 build/
 dist/
+.pytest_cache/
+*.pyc
+.coverage
+htmlcov/
