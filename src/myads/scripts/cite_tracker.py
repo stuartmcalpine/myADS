@@ -100,133 +100,133 @@ def main():
 
     # Add author command
     add_author_parser = subparsers.add_parser(
-        "add-author", help="Add an author to track"
+        "add-author", help="Add author to database for citation tracking"
     )
     add_author_parser.add_argument("forename", help="Author first name")
     add_author_parser.add_argument("surname", help="Author last name")
-    add_author_parser.add_argument("--orcid", help="Author ORCID identifier")
+    add_author_parser.add_argument("--orcid", help="ORCID identifier (enables tracking papers at any author position)")
 
     # Remove author command
     remove_author_parser = subparsers.add_parser(
-        "remove-author", help="Remove an author"
+        "remove-author", help="Remove author from tracking database"
     )
     remove_author_parser.add_argument(
-        "author_id", type=int, help="Author ID to remove"
+        "author_id", type=int, help="Author ID to remove (see list-authors)"
     )
 
     # List authors command
-    subparsers.add_parser("list-authors", help="List all tracked authors")
+    subparsers.add_parser("list-authors", help="Show all tracked authors and their IDs")
 
     # Add token command
-    add_token_parser = subparsers.add_parser("add-token", help="Add ADS API token")
-    add_token_parser.add_argument("token", help="ADS API token")
+    add_token_parser = subparsers.add_parser("add-token", help="Set ADS API token for queries")
+    add_token_parser.add_argument("token", help="Your ADS API token")
 
     # Check citations command
-    check_parser = subparsers.add_parser("check", help="Check for new citations")
+    check_parser = subparsers.add_parser("check", help="Update publications and check for new citations")
     check_parser.add_argument(
-        "--author-id", type=int, help="Author ID to check (default: all authors)"
+        "--author-id", type=int, help="Check specific author ID only (default: all authors)"
     )
     check_parser.add_argument(
         "--max-rows",
         type=int,
         default=2000,
-        help="Maximum rows to return per query for publications and citations",
+        help="Maximum results per ADS query",
     )
     check_parser.add_argument(
         "--verbose",
         action="store_true",
-        help="Show detailed output for updated citations",
+        help="Show updated citations in addition to new citations",
     )
     check_parser.add_argument(
         "--deep",
         action="store_true",
-        help="Perform deep check searching any author position (not just first author) with confirmation prompts",
+        help="Find additional co-authored papers not captured by ORCID search using name matching; requires manual confirmation",
     )
 
     # Generate report command
-    report_parser = subparsers.add_parser("report", help="Generate citation report")
+    report_parser = subparsers.add_parser("report", help="Display citation statistics and tracked publications")
     report_parser.add_argument(
-        "--author-id", type=int, help="Author ID to report on (default: all authors)"
+        "--author-id", type=int, help="Report on specific author ID only (default: all authors)"
     )
     report_parser.add_argument(
         "--show-ignored",
         action="store_true",
-        help="Include ignored publications in the report",
+        help="Include ignored publications in output",
     )
 
     # Ignore publication command
     ignore_parser = subparsers.add_parser(
-        "ignore", help="Mark a publication as ignored"
+        "ignore", help="Exclude publication from tracking and reports"
     )
     ignore_parser.add_argument(
-        "publication_id", type=int, help="Publication ID to ignore"
+        "publication_id", type=int, help="Publication ID to ignore (see report)"
     )
-    ignore_parser.add_argument("--reason", help="Reason for ignoring")
+    ignore_parser.add_argument("--reason", help="Optional reason for ignoring")
 
     # Unignore publication command
     unignore_parser = subparsers.add_parser(
-        "unignore", help="Unmark a publication as ignored"
+        "unignore", help="Re-enable tracking for previously ignored publication"
     )
     unignore_parser.add_argument(
-        "publication_id", type=int, help="Publication ID to unignore"
+        "publication_id", type=int, help="Publication ID to restore (see list-ignored)"
     )
 
     # List ignored publications command
     list_ignored_parser = subparsers.add_parser(
-        "list-ignored", help="List ignored publications"
+        "list-ignored", help="Show all ignored publications"
     )
     list_ignored_parser.add_argument(
         "--author-id",
         type=int,
-        help="Author ID to list ignored publications for (default: all authors)",
+        help="Filter by specific author ID (default: all authors)",
     )
 
     # Clear rejected papers command
     clear_rejected_parser = subparsers.add_parser(
-        "clear-rejected", help="Clear rejected papers from deep check memory"
+        "clear-rejected", help="Reset rejected papers to be re-prompted in future deep checks"
     )
     clear_rejected_parser.add_argument(
         "--author-id",
         type=int,
-        help="Author ID to clear rejected papers for (default: all authors)",
+        help="Filter by specific author ID (default: all authors)",
     )
 
     # List rejected papers command
     list_rejected_parser = subparsers.add_parser(
-        "list-rejected", help="List rejected papers from deep check"
+        "list-rejected", help="Show papers rejected during deep check"
     )
     list_rejected_parser.add_argument(
         "--author-id",
         type=int,
-        help="Author ID to list rejected papers for (default: all authors)",
+        help="Filter by specific author ID (default: all authors)",
     )
 
     # Search command (new one-off search)
     search_parser = subparsers.add_parser(
-        "search", help="Search for author publications (one-off, no database)"
+        "search", help="Query ADS for author publications without saving to database"
     )
     search_parser.add_argument("forename", help="Author first name")
     search_parser.add_argument("surname", help="Author last name")
-    search_parser.add_argument("--orcid", help="Author ORCID identifier")
+    search_parser.add_argument("--orcid", help="ORCID identifier to restrict results (uses AND logic)")
     search_parser.add_argument(
-        "--max-rows", type=int, default=100, help="Maximum number of results"
+        "--max-rows", type=int, default=100, help="Maximum results to return"
     )
     search_parser.add_argument(
-        "--sort", default="citation_count desc", help="Sort order"
+        "--sort", default="citation_count desc", help="Sort order for results"
     )
     search_parser.add_argument(
         "--format",
         choices=["table", "json", "csv"],
         default="table",
-        help="Output format",
+        help="Output format: table (pretty), json, or csv",
     )
     search_parser.add_argument(
-        "--no-stats", action="store_true", help="Don't show summary statistics"
+        "--no-stats", action="store_true", help="Skip summary statistics (table format only)"
     )
     search_parser.add_argument(
         "--first-author-only",
         action="store_true",
-        help="Search only for papers where author is first author (default: any author position)",
+        help="Restrict to first-author papers only (default: any position)",
     )
 
     # Parse arguments
