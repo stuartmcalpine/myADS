@@ -47,8 +47,12 @@ Add an author by their name:
 myads add-author "FirstName" "LastName" --orcid ORCID-ID
 ```
 
-- `--orcid` is optional but highly recommended for accuracy
-- Example:
+**About ORCID:**
+- Optional but highly recommended to avoid name ambiguity
+- Enables tracking papers at any author position (where ORCID is attached in ADS)
+- Without ORCID, only first-author papers are tracked by default
+
+Example:
 
 ```bash
 myads add-author "Jane" "Doe" --orcid 0000-0002-1825-0097
@@ -89,17 +93,19 @@ myads check --author-id 1
 myads check --verbose
 ```
 
-- **Deep check** to find papers where the author appears in any position (not just first author):
+- **Deep check** to find co-authored papers not captured by ORCID search (uses name matching):
 
 ```bash
 myads check --deep --author-id 1
 ```
 
-The deep check will prompt you to confirm each candidate paper. Papers you reject are remembered, so you won't be asked again. To reset this memory:
+This finds papers where the author appears at any position but the ORCID isn't attached in ADS, or for authors without ORCID who want to track co-authored work. You'll be prompted to confirm each candidate paper. Papers you reject are remembered, so you won't be asked again. To reset this memory:
 
 ```bash
 myads clear-rejected --author-id 1
 ```
+
+**Note:** During `myads check`, you may be prompted to remove papers that exist in your local database but are no longer found in ADS results. This typically happens when author metadata is corrected in ADS, ORCIDs are updated, or papers are retracted. Answer 'n' to keep the paper if you know it's yours, or use `myads ignore` to exclude it from tracking.
 
 ### Generate a Citation Report
 
@@ -151,7 +157,7 @@ myads search "Jane" "Doe"
 ```
 
 Options:
-- `--orcid ORCID-ID` - Include ORCID in search
+- `--orcid ORCID-ID` - Restrict results to papers matching both ORCID and author name (AND logic)
 - `--first-author-only` - Restrict to first author papers only
 - `--format {table,json,csv}` - Output format
 - `--max-rows N` - Number of results (default: 100)
@@ -214,7 +220,7 @@ myADS uses an SQLite database to track publications, citations, and authors. Thi
 - Author position is determined from the full author list
 
 **Deep Search**:
-By default, myADS tracks papers where the author is first author. Use `--deep` to find papers where they appear in any position, with interactive confirmation to avoid false matches.
+Default tracking behavior depends on ORCID: with ORCID, myADS tracks papers at any author position (where ORCID is attached in ADS) plus first-author papers by name; without ORCID, only first-author papers are tracked. Use `--deep` to find additional co-authored papers not captured by ORCID search, with interactive confirmation to avoid false matches.
 
 **Automatic Resilience**:
 - Auto-handles expired ADS tokens
@@ -222,8 +228,8 @@ By default, myADS tracks papers where the author is first author. Use `--deep` t
 
 ## Tips
 
-- Adding ORCIDs increases precision and avoids name ambiguity
-- Use `--deep` periodically to catch papers where ORCID wasn't properly linked
+- Adding ORCIDs enables tracking at any author position (not just first author) and avoids name ambiguity
+- Use `--deep` periodically to catch co-authored papers where ORCID wasn't properly linked in ADS
 - Ignore conference proceedings or other non-article publications to clean up your reports
 - Use `myads search` to quickly check someone's work without adding them to your database
 - Set up a cron job or scheduled task to run `myads check` weekly
