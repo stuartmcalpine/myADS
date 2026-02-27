@@ -128,6 +128,18 @@ You can generate a report for a specific author:
 myads report --author-id 1
 ```
 
+For a detailed per-paper breakdown including a quarterly citation timeline, use `--extended`:
+
+```bash
+myads report --extended
+```
+
+This replaces the summary table with a section per paper showing the full title, ADS link, citation stats, and a bar chart of citations received each quarter since publication. You can combine it with `--id` to focus on specific papers:
+
+```bash
+myads report --extended --id 40 23
+```
+
 ### Ignore Publications
 
 Mark conference proceedings, theses, or other papers you don't want to track:
@@ -200,7 +212,7 @@ H-index: 2
 | myads list-authors | List all tracked authors |
 | myads add-token YOUR-TOKEN | Add or update your ADS API token |
 | myads check [--author-id ID] [--verbose] [--deep] | Check for new/updated citations |
-| myads report [--author-id ID] [--show-ignored] | Generate citation reports |
+| myads report [--author-id ID] [--show-ignored] [--extended] [--id ID ...] | Generate citation reports |
 | myads ignore PUBLICATION_ID [--reason TEXT] | Mark publication as ignored |
 | myads unignore PUBLICATION_ID | Restore tracking for publication |
 | myads list-ignored [--author-id ID] | List ignored publications |
