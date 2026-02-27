@@ -366,7 +366,11 @@ class CitationTracker:
 
     # Report operations (delegate to ReportGenerator)
     def generate_report(
-        self, author_id: Optional[int] = None, show_ignored: bool = False
+        self,
+        author_id: Optional[int] = None,
+        show_ignored: bool = False,
+        extended: bool = False,
+        publication_ids: Optional[list] = None,
     ) -> None:
         """
         Generate a citation report for one or all authors.
@@ -377,6 +381,10 @@ class CitationTracker:
             ID of a specific author to report on. If None, report on all authors.
         show_ignored : bool, optional
             Whether to include ignored publications in the report.
+        extended : bool, optional
+            Whether to show per-paper details with quarterly citation timeline.
+        publication_ids : list of int, optional
+            If provided, only include publications with these IDs.
         """
         with self.session_scope() as session:
             # Determine which authors to report on
@@ -398,10 +406,13 @@ class CitationTracker:
                 if not show_ignored:
                     query = query.filter_by(ignored=False)
 
+                if publication_ids:
+                    query = query.filter(Publication.id.in_(publication_ids))
+
                 publications = query.order_by(Publication.citation_count.desc()).all()
 
                 self.report_generator.generate_author_report(
-                    session, author, publications
+                    session, author, publications, extended=extended
                 )
 
     # Search operations (delegate to SearchManager)

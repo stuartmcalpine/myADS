@@ -46,7 +46,10 @@ def check_citations_cli(tracker: CitationTracker, args: Dict[str, Any]) -> None:
 def generate_report_cli(tracker: CitationTracker, args: Dict[str, Any]) -> None:
     """CLI handler for generating reports."""
     tracker.generate_report(
-        author_id=args.get("author_id"), show_ignored=args.get("show_ignored", False)
+        author_id=args.get("author_id"),
+        show_ignored=args.get("show_ignored", False),
+        extended=args.get("extended", False),
+        publication_ids=args.get("publication_ids"),
     )
 
 
@@ -156,6 +159,19 @@ def main():
         "--show-ignored",
         action="store_true",
         help="Include ignored publications in output",
+    )
+    report_parser.add_argument(
+        "--extended",
+        action="store_true",
+        help="Show per-paper details with quarterly citation timeline instead of summary table",
+    )
+    report_parser.add_argument(
+        "--id",
+        dest="publication_ids",
+        type=int,
+        nargs="+",
+        metavar="ID",
+        help="Only show specific publication IDs (see report for IDs)",
     )
 
     # Ignore publication command
