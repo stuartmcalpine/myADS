@@ -134,12 +134,6 @@ For a detailed per-paper breakdown including a quarterly citation timeline, use 
 myads report --extended
 ```
 
-This replaces the summary table with a section per paper showing the full title, ADS link, citation stats, and a bar chart of citations received each quarter since publication. You can combine it with `--id` to focus on specific papers:
-
-```bash
-myads report --extended --id 40 23
-```
-
 ### Ignore Publications
 
 Mark conference proceedings, theses, or other papers you don't want to track:
@@ -177,30 +171,6 @@ Options:
 Example:
 ```bash
 myads search "Jane" "Doe" --orcid 0000-0002-1825-0097 --format csv > output.csv
-```
-
-### Example Output: Citation Report
-
-```
-Citation Report for Jane Doe
-─────────────────────────────────────────────────────────────────────────────────
-ID  Pos  Title                              Citations  Year  ADS Link
-                                            (90d)
-                                            (per yr)
-─────────────────────────────────────────────────────────────────────────────────
-42  1st  Galaxy Mergers and Black Holes...  52         2020  [link]
-                                            (5)
-                                            (10.3)
-15  3rd  Collaboration Paper...             10         2024  [link]
-                                            (9)
-                                            (45.0)
-─────────────────────────────────────────────────────────────────────────────────
-
-Summary Statistics:
-Total Publications: 2
-Total Citations: 62
-Average Citations per Publication: 31.00
-H-index: 2
 ```
 
 ## Command Overview
