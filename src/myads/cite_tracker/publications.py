@@ -337,9 +337,14 @@ class PublicationManager:
             msg += "[/yellow]"
             self.console.print(msg)
 
-        # Identify local publications not found in current ADS results
+        # Identify local publications not found in current ADS results.
+        # Exclude papers that were deliberately added via deep check — those
+        # will never appear in the ORCID/first-author query by design.
+        deep_added_bibcodes = {
+            p.bibcode for p in local_pubs_before_fetch if p.added_via_deep
+        }
         bibcodes_to_check_for_removal = (
-            local_bibcodes_before_fetch - ads_bibcodes_from_api
+            local_bibcodes_before_fetch - ads_bibcodes_from_api - deep_added_bibcodes
         )
 
         if bibcodes_to_check_for_removal:
@@ -515,8 +520,17 @@ class PublicationManager:
             )
 
             if confirmation:
-                # Add to publications
+                # Add to publications and flag as deep-added so future normal
+                # checks don't prompt to remove it (it won't appear in the
+                # ORCID query since the ORCID isn't linked in ADS).
                 self._update_publications(session, author, [paper])
+                pub = (
+                    session.query(Publication)
+                    .filter_by(bibcode=paper.bibcode, author_id=author.id)
+                    .first()
+                )
+                if pub:
+                    pub.added_via_deep = True
                 self.console.print(
                     f"[green]Added '{paper.title[:50]}...' to tracked publications.[/green]\n"
                 )

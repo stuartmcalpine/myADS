@@ -2,7 +2,7 @@
 
 from contextlib import contextmanager
 from typing import Generator
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 
 
@@ -27,6 +27,15 @@ class DatabaseManager:
         if create_tables:
             from .models import Base
             Base.metadata.create_all(self.engine)
+            self._migrate()
+
+    def _migrate(self) -> None:
+        """Apply any schema migrations needed for existing databases."""
+        with self.engine.connect() as conn:
+            existing = {row[1] for row in conn.execute(text("PRAGMA table_info(publications)"))}
+            if "added_via_deep" not in existing:
+                conn.execute(text("ALTER TABLE publications ADD COLUMN added_via_deep BOOLEAN DEFAULT 0"))
+                conn.commit()
 
     @contextmanager
     def session_scope(self) -> Generator[Session, None, None]:

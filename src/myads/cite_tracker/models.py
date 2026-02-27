@@ -64,6 +64,7 @@ class Publication(Base):
     last_updated = Column(DateTime, default=datetime.datetime.now)
     ignored = Column(Boolean, default=False)
     ignore_reason = Column(Text)
+    added_via_deep = Column(Boolean, default=False)
 
     # Relationships
     author = relationship("Author", back_populates="publications")
