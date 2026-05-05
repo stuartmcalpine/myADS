@@ -1,6 +1,7 @@
 from urllib.parse import urlencode
 import requests
 import logging
+import time
 from datetime import datetime
 import pandas as pd
 import numpy as np
@@ -457,11 +458,15 @@ class ADSQueryWrapper:
                     logger.warning(
                         f"Attempt {attempt+1}/{self.max_attempts} failed with status {response.status_code}: {response.text}"
                     )
+                    if attempt < self.max_attempts - 1:
+                        time.sleep(2 ** attempt)
 
             except requests.RequestException as e:
                 logger.warning(
                     f"Attempt {attempt+1}/{self.max_attempts} failed: {str(e)}"
                 )
+                if attempt < self.max_attempts - 1:
+                    time.sleep(2 ** attempt)
 
         raise RuntimeError(
             f"Failed to get a valid response from ADS API after {self.max_attempts} attempts."
