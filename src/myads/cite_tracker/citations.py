@@ -1,14 +1,16 @@
 """Citation checking and processing."""
 
+import ast
 import datetime
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 from sqlalchemy.orm import Session
 from rich.table import Table
 from rich import box
 
 from .models import Author, Publication, Citation
+from .utils import ads_link, truncate
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,19 @@ class CitationManager:
 
         return results
 
+    @staticmethod
+    def _citation_fields(paper) -> Dict[str, Optional[str]]:
+        """Extract the Citation column values from an ADS paper."""
+        doi = getattr(paper, "doi", None)
+        if isinstance(doi, list):
+            doi = ";".join(doi)
+        return {
+            "title": getattr(paper, "title", None) or "",
+            "authors": str(getattr(paper, "author", None) or []),
+            "publication_date": getattr(paper, "date", None),
+            "doi": doi,
+        }
+
     def _process_citations(
         self, session: Session, publication: Publication, citation_data
     ) -> CitationUpdate:
@@ -91,59 +106,30 @@ class CitationManager:
         new_citations = []
         updated_citations = []
 
+        existing = {c.bibcode: c for c in publication.citations}
+
         for paper in citation_data.papers:
-            citation = (
-                session.query(Citation)
-                .filter_by(bibcode=paper.bibcode, publication_id=publication.id)
-                .first()
-            )
+            fields = self._citation_fields(paper)
+            citation = existing.get(paper.bibcode)
 
             if citation:
-                # Check if any fields need updating
+                # Update any fields that have changed in ADS
                 updated = False
-
-                if citation.title != paper.title:
-                    citation.title = paper.title
-                    updated = True
-
-                ads_authors_str = str(getattr(paper, "author", []))
-                if citation.authors != ads_authors_str:
-                    citation.authors = ads_authors_str
-                    updated = True
-
-                ads_pub_date = getattr(paper, "date", None)
-                if citation.publication_date != ads_pub_date:
-                    citation.publication_date = ads_pub_date
-                    updated = True
-
-                ads_doi_val = getattr(paper, "doi", None)
-                if isinstance(ads_doi_val, list):
-                    ads_doi_str = ";".join(ads_doi_val)
-                else:
-                    ads_doi_str = ads_doi_val
-
-                if citation.doi != ads_doi_str:
-                    citation.doi = ads_doi_str
-                    updated = True
+                for name, value in fields.items():
+                    if getattr(citation, name) != value:
+                        setattr(citation, name, value)
+                        updated = True
 
                 if updated:
                     updated_citations.append(citation)
             else:
-                # Create new citation
-                doi_value = getattr(paper, "doi", None)
-                if isinstance(doi_value, list):
-                    doi_value = ";".join(doi_value)
-
                 citation = Citation(
                     bibcode=paper.bibcode,
-                    title=paper.title,
-                    authors=str(getattr(paper, "author", [])),
-                    publication_date=getattr(paper, "date", None),
-                    doi=doi_value,
-                    publication_id=publication.id,
                     discovery_date=datetime.datetime.now(),
+                    **fields,
                 )
-                session.add(citation)
+                publication.citations.append(citation)
+                existing[paper.bibcode] = citation
                 new_citations.append(citation)
 
         # Update the publication's citation count
@@ -182,9 +168,7 @@ class CitationManager:
                 )
                 continue
 
-            pub_title_display = publication.title
-            if len(pub_title_display) > 70:
-                pub_title_display = pub_title_display[:67] + "..."
+            pub_title_display = truncate(publication.title, 70)
 
             # Display new citations
             if citation_update.new_citations:
@@ -234,39 +218,28 @@ class CitationManager:
         table.add_column("ADS Link", style="blue", no_wrap=True)
 
         for citation in citations:
-            # Truncate title if too long
-            title = citation.title
-            if len(title) > 55:
-                title = title[:52] + "..."
-
-            # Format authors
+            # Authors are stored as the repr of the ADS author list
             authors_str = citation.authors
-            if authors_str:
-                if authors_str.startswith("[") and "et al." not in authors_str:
-                    try:
-                        authors_list = eval(authors_str)
-                        if isinstance(authors_list, list) and len(authors_list) > 1:
-                            authors_str = f"{authors_list[0]}, et al."
-                        elif isinstance(authors_list, list) and len(authors_list) == 1:
-                            authors_str = authors_list[0]
-                    except:
-                        pass
+            if authors_str and authors_str.startswith("["):
+                try:
+                    authors_list = ast.literal_eval(authors_str)
+                except (ValueError, SyntaxError):
+                    authors_list = None
+                if isinstance(authors_list, list):
+                    if len(authors_list) > 1:
+                        authors_str = f"{authors_list[0]}, et al."
+                    elif authors_list:
+                        authors_str = authors_list[0]
+                    else:
+                        authors_str = ""
 
-                if len(authors_str) > 35:
-                    authors_str = authors_str[:32] + "..."
-            else:
-                authors_str = "-"
+            date = (citation.publication_date or "")[:10]
 
-            # Create ADS link
-            ads_link = (
-                f"https://ui.adsabs.harvard.edu/abs/{citation.bibcode}/abstract"
+            table.add_row(
+                truncate(citation.title, 55),
+                truncate(authors_str, 35) or "-",
+                date or "-",
+                ads_link(citation.bibcode),
             )
-
-            # Format date
-            date = citation.publication_date
-            if date and len(date) > 10:
-                date = date[:10]
-
-            table.add_row(title, authors_str, date or "-", ads_link)
 
         self.console.print(table)

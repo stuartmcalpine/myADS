@@ -8,8 +8,9 @@ from rich.prompt import Confirm
 from rich.table import Table
 from rich import box
 
-from myads import ADSQueryWrapper, ADSPaper
+from myads import ADSPaper
 from .models import Author, Publication, RejectedPaper
+from .utils import truncate
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class PublicationManager:
         pub.ignore_reason = reason
 
         self.console.print(
-            f"[green]Publication '{pub.title[:50]}...' marked as ignored.[/green]"
+            f"[green]Publication '{truncate(pub.title, 50)}' marked as ignored.[/green]"
         )
         if reason:
             self.console.print(f"[dim]Reason: {reason}[/dim]")
@@ -110,7 +111,7 @@ class PublicationManager:
         pub.ignore_reason = None
 
         self.console.print(
-            f"[green]Publication '{pub.title[:50]}...' is now being tracked.[/green]"
+            f"[green]Publication '{truncate(pub.title, 50)}' is now being tracked.[/green]"
         )
 
         return True
@@ -146,7 +147,7 @@ class PublicationManager:
         table.add_column("Reason", style="magenta", no_wrap=False, max_width=30)
 
         for pub in ignored_pubs:
-            author = session.query(Author).filter_by(id=pub.author_id).first()
+            author = pub.author
             author_name = (
                 f"{author.forename} {author.surname}" if author else "Unknown"
             )
@@ -246,7 +247,7 @@ class PublicationManager:
         table.add_column("Rejected Date", style="magenta")
 
         for rejected in rejected_papers:
-            author = session.query(Author).filter_by(id=rejected.author_id).first()
+            author = rejected.author
             author_name = (
                 f"{author.forename} {author.surname}" if author else "Unknown"
             )
@@ -306,27 +307,12 @@ class PublicationManager:
             q=q, fl=fl, rows=max_rows, sort="pubdate desc", verbose=False
         )
 
-        current_ads_papers_list = []
-        ads_bibcodes_from_api = set()
+        current_ads_papers_list = [
+            p for p in ads_api_results.papers if getattr(p, "bibcode", None)
+        ]
+        ads_bibcodes_from_api = {p.bibcode for p in current_ads_papers_list}
 
-        if ads_api_results and ads_api_results.papers:
-            try:
-                current_ads_papers_list = list(ads_api_results.papers)
-                ads_bibcodes_from_api = {
-                    p.bibcode
-                    for p in current_ads_papers_list
-                    if hasattr(p, "bibcode")
-                }
-            except TypeError:
-                if ads_api_results.papers:
-                    current_ads_papers_list = ads_api_results.papers
-                    ads_bibcodes_from_api = {
-                        p.bibcode
-                        for p in current_ads_papers_list
-                        if hasattr(p, "bibcode")
-                    }
-
-        if not ads_api_results or ads_api_results.num_found == 0:
+        if ads_api_results.num_found == 0:
             msg = f"[yellow]No publications found in ADS for {author.forename} {author.surname}."
             if author.orcid:
                 msg += f"\nSearched: ORCID {author.orcid} OR first author by name."
@@ -351,19 +337,9 @@ class PublicationManager:
             self.console.print(
                 f"\n[bold yellow]Checking for local publications not found in current ADS results for {author.forename} {author.surname}:[/bold yellow]"
             )
-            for bibcode_to_remove in bibcodes_to_check_for_removal:
-                pub_to_remove = next(
-                    (
-                        p
-                        for p in local_pubs_before_fetch
-                        if p.bibcode == bibcode_to_remove
-                    ),
-                    None,
-                )
-                if pub_to_remove:
-                    display_title = pub_to_remove.title
-                    if len(display_title) > 70:
-                        display_title = display_title[:67] + "..."
+            for pub_to_remove in local_pubs_before_fetch:
+                if pub_to_remove.bibcode in bibcodes_to_check_for_removal:
+                    display_title = truncate(pub_to_remove.title, 70)
 
                     self.console.print(
                         f"Local entry: [cyan]{display_title}[/cyan] (Bibcode: {pub_to_remove.bibcode})"
@@ -397,10 +373,17 @@ class PublicationManager:
         # Update local database with current ADS publications
         self._update_publications(session, author, current_ads_papers_list)
 
-        # Deep check if requested
+        # Deep check if requested. Anything already stored locally (including
+        # papers accepted in earlier deep checks) is not a new candidate.
         if deep:
+            stored_bibcodes = {
+                bibcode
+                for (bibcode,) in session.query(Publication.bibcode).filter_by(
+                    author_id=author.id
+                )
+            }
             self._deep_check_author(
-                session, author, max_rows, ads_bibcodes_from_api
+                session, author, max_rows, ads_bibcodes_from_api | stored_bibcodes
             )
 
         # Return the final list of publications for this author from the DB
@@ -434,7 +417,7 @@ class PublicationManager:
             q=q, fl=fl, rows=max_rows, sort="pubdate desc", verbose=False
         )
 
-        if not name_only_results or name_only_results.num_found == 0:
+        if name_only_results.num_found == 0:
             self.console.print(
                 f"[yellow]No additional papers found in deep check.\n"
                 f"Searched: author:\"{author.surname}, {author.forename}\" (any author position by name).\n"
@@ -448,61 +431,50 @@ class PublicationManager:
             for r in session.query(RejectedPaper).filter_by(author_id=author.id).all()
         }
 
-        # Get ignored bibcodes
-        ignored_bibcodes = {
-            p.bibcode
-            for p in session.query(Publication)
-            .filter_by(author_id=author.id, ignored=True)
-            .all()
-        }
+        # Find new candidates (known_bibcodes includes ignored publications)
+        candidate_papers = [
+            p
+            for p in name_only_results.papers
+            if p.bibcode
+            and p.bibcode not in known_bibcodes
+            and p.bibcode not in rejected_bibcodes
+        ]
 
-        # Find new candidates
-        all_name_bibcodes = {
-            p.bibcode for p in name_only_results.papers if hasattr(p, "bibcode")
-        }
-        candidate_bibcodes = (
-            all_name_bibcodes - known_bibcodes - rejected_bibcodes - ignored_bibcodes
-        )
-
-        if not candidate_bibcodes:
+        if not candidate_papers:
             self.console.print(
                 "[green]No new candidate papers found in deep check.[/green]"
             )
             return
 
         self.console.print(
-            f"[yellow]Found {len(candidate_bibcodes)} candidate paper(s) not in your tracked publications.[/yellow]\n"
+            f"[yellow]Found {len(candidate_papers)} candidate paper(s) not in your tracked publications.[/yellow]\n"
         )
-
-        # Get full paper objects for candidates
-        candidate_papers = [
-            p for p in name_only_results.papers if p.bibcode in candidate_bibcodes
-        ]
 
         for paper in candidate_papers:
             # Display paper info
             self.console.print(f"[bold cyan]Title:[/bold cyan] {paper.title}")
             self.console.print(f"[bold cyan]Bibcode:[/bold cyan] {paper.bibcode}")
 
-            # Show authors
-            authors_list = getattr(paper, "author", [])
+            # Show authors (a single-author paper comes back as a plain string)
+            authors_list = getattr(paper, "author", None) or []
+            if isinstance(authors_list, str):
+                authors_list = [authors_list]
             if authors_list:
+                author_str = "; ".join(authors_list[:5])
                 if len(authors_list) > 5:
-                    author_str = ", ".join(authors_list[:5]) + ", et al."
-                else:
-                    author_str = ", ".join(authors_list)
+                    author_str += "; et al."
                 self.console.print(f"[bold cyan]Authors:[/bold cyan] {author_str}")
 
             # Show year
-            pubdate = getattr(paper, "pubdate", "")
+            pubdate = getattr(paper, "pubdate", None)
             if pubdate:
                 year = pubdate.split("-")[0]
                 self.console.print(f"[bold cyan]Year:[/bold cyan] {year}")
 
             # Show abstract snippet
-            abstract = getattr(paper, "abstract", "")
+            abstract = getattr(paper, "abstract", None)
             if abstract:
-                snippet = abstract[:200] + "..." if len(abstract) > 200 else abstract
+                snippet = truncate(abstract, 203)
                 self.console.print(f"[bold cyan]Abstract:[/bold cyan] {snippet}")
 
             self.console.print("")
@@ -523,16 +495,10 @@ class PublicationManager:
                 # Add to publications and flag as deep-added so future normal
                 # checks don't prompt to remove it (it won't appear in the
                 # ORCID query since the ORCID isn't linked in ADS).
-                self._update_publications(session, author, [paper])
-                pub = (
-                    session.query(Publication)
-                    .filter_by(bibcode=paper.bibcode, author_id=author.id)
-                    .first()
-                )
-                if pub:
-                    pub.added_via_deep = True
+                (pub,) = self._update_publications(session, author, [paper])
+                pub.added_via_deep = True
                 self.console.print(
-                    f"[green]Added '{paper.title[:50]}...' to tracked publications.[/green]\n"
+                    f"[green]Added '{truncate(paper.title, 50)}' to tracked publications.[/green]\n"
                 )
             else:
                 # Add to rejected papers
@@ -543,7 +509,7 @@ class PublicationManager:
                 )
                 session.add(rejected)
                 self.console.print(
-                    f"[red]Marked '{paper.title[:50]}...' as rejected.[/red]\n"
+                    f"[red]Marked '{truncate(paper.title, 50)}' as rejected.[/red]\n"
                 )
 
     def _update_publications(
@@ -554,29 +520,32 @@ class PublicationManager:
         """
         updated_sqlalchemy_pubs = []
 
+        # Existing publications for this author (including ignored ones)
+        existing = {
+            p.bibcode: p
+            for p in session.query(Publication).filter_by(author_id=author.id)
+        }
+
         for paper_obj in current_ads_papers:
-            # Check if publication exists (including ignored ones)
-            pub = (
-                session.query(Publication)
-                .filter_by(bibcode=paper_obj.bibcode, author_id=author.id)
-                .first()
-            )
+            pub = existing.get(paper_obj.bibcode)
 
             try:
                 cite_count = int(getattr(paper_obj, "citation_count", 0) or 0)
-            except:
+            except (TypeError, ValueError):
                 cite_count = 0
 
             # Get author list and store as semicolon-separated string
-            authors_list = getattr(paper_obj, "author", [])
+            authors_list = getattr(paper_obj, "author", None)
             if isinstance(authors_list, list):
                 authors_str = "; ".join(authors_list)
             else:
                 authors_str = str(authors_list) if authors_list else ""
 
+            title = getattr(paper_obj, "title", None) or ""
+
             if pub:
                 # Update existing publication (but don't change ignored status)
-                pub.title = paper_obj.title
+                pub.title = title
                 pub.citation_count = cite_count
                 pub.pubdate = getattr(paper_obj, "pubdate", None)
                 pub.authors = authors_str
@@ -585,7 +554,7 @@ class PublicationManager:
                 # Add new publication
                 pub = Publication(
                     bibcode=paper_obj.bibcode,
-                    title=paper_obj.title,
+                    title=title,
                     pubdate=getattr(paper_obj, "pubdate", None),
                     authors=authors_str,
                     citation_count=cite_count,
@@ -594,6 +563,7 @@ class PublicationManager:
                     ignored=False,
                 )
                 session.add(pub)
+                existing[pub.bibcode] = pub
 
             updated_sqlalchemy_pubs.append(pub)
 

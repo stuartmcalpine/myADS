@@ -2,7 +2,7 @@
 
 import logging
 from typing import Optional, Dict
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import selectinload
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from rich.console import Console
@@ -112,7 +112,7 @@ class CitationTracker:
             else:
                 session.add(ADSToken(token=token))
 
-            self.console.print(f"[green]ADS token updated successfully.[/green]")
+            self.console.print("[green]ADS token updated successfully.[/green]")
 
         # Reset the ADS wrapper to use the new token
         self._ads_wrapper = None
@@ -337,14 +337,10 @@ class CitationTracker:
                     f"Checking citations for [cyan]{author.forename} {author.surname}[/cyan]..."
                 )
 
-                # Refresh author's publications first
-                self.fetch_author_publications(author.id, max_rows, deep=deep)
-
-                # Get the updated publications list (excluding ignored)
-                publications = (
-                    session.query(Publication)
-                    .filter_by(author_id=author.id, ignored=False)
-                    .all()
+                # Refresh author's publications first (in this same session, so
+                # we don't hold two SQLite write transactions at once)
+                publications = self.publication_manager.fetch_author_publications(
+                    session, author.id, max_rows, deep
                 )
 
                 # Check citations
@@ -409,7 +405,11 @@ class CitationTracker:
                 if publication_ids:
                     query = query.filter(Publication.id.in_(publication_ids))
 
-                publications = query.order_by(Publication.citation_count.desc()).all()
+                publications = (
+                    query.options(selectinload(Publication.citations))
+                    .order_by(Publication.citation_count.desc())
+                    .all()
+                )
 
                 self.report_generator.generate_author_report(
                     session, author, publications, extended=extended

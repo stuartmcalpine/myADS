@@ -1,11 +1,15 @@
 """One-off search functionality for the citation tracker."""
 
-import datetime
+import csv
+import json
 import logging
+import sys
 from typing import List, Optional
 from myads import ADSPaper, ADSQuery
 from rich.table import Table
 from rich import box
+
+from .utils import ads_link, h_index, parse_ads_date, truncate, years_since
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +97,7 @@ class SearchManager:
             self.console.print(f"[red]Error querying ADS: {e}[/red]")
             return None
 
-        if not results or results.num_found == 0:
+        if results.num_found == 0:
             msg = f"[yellow]No publications found for {forename} {surname}."
             if orcid:
                 msg += f"\nSearched: ORCID {orcid} AND {author_field}:\"{surname}, {forename}\"."
@@ -150,105 +154,50 @@ class SearchManager:
         table.add_column("Pub Date", style="yellow")
         table.add_column("ADS Link", style="blue", no_wrap=True)
 
-        total_citations = 0
+        cite_counts = [getattr(p, "citation_count", None) or 0 for p in papers]
 
-        for paper in papers:
-            cite_count = getattr(paper, "citation_count", 0) or 0
-            pubdate = getattr(paper, "pubdate", "")
+        for paper, cite_count in zip(papers, cite_counts):
+            pubdate = getattr(paper, "pubdate", None)
+            pub_date = parse_ads_date(pubdate)
 
-            # Calculate years since publication and citations per year
-            years_since_pub = None
             citations_per_year_str = "-"
-
-            if pubdate:
-                try:
-                    date_part = pubdate.split("T")[0]
-                    pub_date_parts = date_part.split("-")
-
-                    year = int(pub_date_parts[0])
-                    month = 1
-                    if len(pub_date_parts) > 1:
-                        month_val = int(pub_date_parts[1])
-                        month = month_val if month_val != 0 else 1
-
-                    day = 1
-                    if len(pub_date_parts) > 2:
-                        day_val = int(pub_date_parts[2])
-                        day = day_val if day_val != 0 else 1
-
-                    pub_datetime_obj = datetime.datetime(year, month, day)
-                    years_since_pub = max(
-                        (datetime.datetime.now() - pub_datetime_obj).days / 365.25,
-                        1 / 12.0,
-                    )
-
-                    if years_since_pub > 0 and cite_count is not None:
-                        citations_per_year = cite_count / years_since_pub
-                        citations_per_year_str = f"{citations_per_year:.1f}"
-                except (ValueError, IndexError, TypeError):
-                    pass
-
-            # Format title
-            title_display = paper.title
-            if len(title_display) > 55:
-                title_display = title_display[:52] + "..."
-
-            # Create ADS link
-            ads_link = f"https://ui.adsabs.harvard.edu/abs/{paper.bibcode}/abstract"
+            if pub_date:
+                citations_per_year_str = f"{cite_count / years_since(pub_date):.1f}"
 
             table.add_row(
-                title_display,
+                truncate(getattr(paper, "title", None), 55),
                 f"{cite_count} [{citations_per_year_str}]",
                 pubdate or "-",
-                ads_link,
+                ads_link(paper.bibcode),
             )
-
-            total_citations += cite_count
 
         self.console.print(table)
 
         # Display statistics if requested
         if include_stats:
-            self.console.print(f"\n[bold]Summary Statistics:[/bold]")
+            total_citations = sum(cite_counts)
+            self.console.print("\n[bold]Summary Statistics:[/bold]")
             self.console.print(f"Total Publications: [green]{len(papers)}[/green]")
             self.console.print(f"Total Citations: [green]{total_citations}[/green]")
 
-            if len(papers) > 0:
-                avg_citations = (
-                    total_citations / len(papers) if total_citations > 0 else 0.0
-                )
+            if papers:
                 self.console.print(
-                    f"Average Citations per Publication: [green]{avg_citations:.2f}[/green]"
+                    f"Average Citations per Publication: [green]{total_citations / len(papers):.2f}[/green]"
                 )
-
-                # H-index calculation
-                citation_counts = sorted(
-                    [getattr(p, "citation_count", 0) or 0 for p in papers],
-                    reverse=True,
-                )
-                h_index = 0
-                for i, count_val in enumerate(citation_counts):
-                    if count_val >= (i + 1):
-                        h_index = i + 1
-                    else:
-                        break
-
-                self.console.print(f"H-index: [green]{h_index}[/green]")
+                self.console.print(f"H-index: [green]{h_index(cite_counts)}[/green]")
 
     def _export_search_results_json(self, papers: List[ADSPaper]) -> None:
         """
         Export search results as JSON.
         """
-        import json
-
         results = []
         for paper in papers:
             paper_dict = {
                 "title": paper.title,
                 "bibcode": paper.bibcode,
-                "authors": getattr(paper, "author", []),
+                "authors": getattr(paper, "author", None) or [],
                 "citation_count": getattr(paper, "citation_count", 0) or 0,
-                "pubdate": getattr(paper, "pubdate", ""),
+                "pubdate": getattr(paper, "pubdate", None) or "",
             }
             results.append(paper_dict)
 
@@ -258,14 +207,11 @@ class SearchManager:
         """
         Export search results as CSV.
         """
-        import csv
-        import sys
-
         writer = csv.writer(sys.stdout)
         writer.writerow(["Title", "Bibcode", "Authors", "Citations", "PubDate"])
 
         for paper in papers:
-            authors = getattr(paper, "author", [])
+            authors = getattr(paper, "author", None) or ""
             if isinstance(authors, list):
                 authors = "; ".join(authors)
 
@@ -275,6 +221,6 @@ class SearchManager:
                     paper.bibcode,
                     authors,
                     getattr(paper, "citation_count", 0) or 0,
-                    getattr(paper, "pubdate", ""),
+                    getattr(paper, "pubdate", None) or "",
                 ]
             )

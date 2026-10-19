@@ -11,6 +11,11 @@ from typing import Dict, List, Optional, Union, Generator, Any, Tuple
 logger = logging.getLogger(__name__)
 
 
+def _is_missing(value: Any) -> bool:
+    """Return True if value is a scalar NaN/None placeholder for a missing field."""
+    return value is None or (isinstance(value, float) and np.isnan(value))
+
+
 class ADSPaper:
     """
     Represents a single paper from ADS search results.
@@ -36,88 +41,6 @@ class ADSPaper:
             return f"Paper({self.bibcode})"
         else:
             return "Paper(Unknown)"
-
-
-class ADSQuery2:
-    """
-    Represents the results of a query to the ADS API.
-    """
-
-    # Class constants
-    ADS_BASE_URL = "https://ui.adsabs.harvard.edu/abs"
-
-    def __init__(
-        self,
-        q: str,
-        fl: str,
-        rows: int,
-        response: requests.Response,
-        suppress_warnings: bool = False,
-    ):
-        """
-        Store and process the result of an ADS API query.
-
-        Parameters
-        ----------
-        q : str
-            The search query string (URL-encoded).
-        fl : str
-            Comma-separated list of fields to return.
-        rows : int
-            Number of results requested.
-        response : requests.Response
-            The response object from the API request.
-        suppress_warnings : bool, optional
-            Whether to suppress pagination warnings, by default False.
-            Useful for citations/references queries where partial results are expected.
-        """
-        # Store query parameters
-        self.q = q
-        self.fl = fl
-        self.rows = rows
-        self.suppress_warnings = suppress_warnings
-
-        # Process the response
-        self._parse(response)
-
-    def _parse(self, response: requests.Response) -> None:
-        """
-        Parse the API response and store the results.
-
-        Parameters
-        ----------
-        response : requests.Response
-            The response from the API request.
-
-        Raises
-        ------
-        ValueError
-            If the query status is not 0 (success).
-        """
-        # Parse JSON response
-        data = response.json()
-
-        # Store query metadata
-        header = data["responseHeader"]
-        self.query_time = header["QTime"]
-        self.query_status = header["status"]
-
-        if self.query_status != 0:
-            raise ValueError(f"Query failed with status {self.query_status}")
-
-        # Store result metadata
-        self.num_found = data["response"]["numFound"]
-        docs = data["response"]["docs"]
-
-        # Check if we got all results (but suppress for citations/references)
-        if self.num_found > len(docs) and not self.suppress_warnings:
-            logger.warning(
-                f"Query returns more results than retrieved: {self.num_found} > {self.rows}. "
-                "Consider pagination for complete results."
-            )
-
-        # Process the documents
-        self._process_documents(docs)
 
 
 class ADSQuery:
@@ -209,15 +132,19 @@ class ADSQuery:
         Yields
         ------
         ADSPaper
-            Object representing a single paper.
+            Object representing a single paper. Fields missing from the ADS
+            record are set to None (they are NaN in ``papers_dict``/``papers_df``).
         """
-        if not hasattr(self, "papers_dict") or not self.papers_dict:
+        if not getattr(self, "papers_dict", None):
             return
 
-        atts = list(self.papers_dict.keys())
+        n_papers = len(next(iter(self.papers_dict.values())))
 
-        for i in range(len(self.papers_dict[atts[0]])):
-            paper_data = {key: value[i] for key, value in self.papers_dict.items()}
+        for i in range(n_papers):
+            paper_data = {
+                key: None if _is_missing(value[i]) else value[i]
+                for key, value in self.papers_dict.items()
+            }
             yield ADSPaper(paper_data)
 
     def _clean_value(self, value: Any) -> Any:
@@ -411,6 +338,7 @@ class ADSQueryWrapper:
     # Class constants
     API_URL = "https://api.adsabs.harvard.edu/v1/search/query"
     MAX_ROWS_PER_QUERY = 2000
+    REQUEST_TIMEOUT = 60  # seconds
 
     def __init__(self, ads_token: str, max_attempts: int = 3):
         """
@@ -442,7 +370,9 @@ class ADSQueryWrapper:
         """
         for attempt in range(self.max_attempts):
             try:
-                response = requests.get(url, headers=headers)
+                response = requests.get(
+                    url, headers=headers, timeout=self.REQUEST_TIMEOUT
+                )
                 self.ads_api_calls += 1
 
                 if response.status_code == 200:
@@ -498,30 +428,29 @@ class ADSQueryWrapper:
         List[ADSQuery]
             List of query result objects, one per page.
         """
-        results = []
-        page = 1
-        rows = min(self.MAX_ROWS_PER_QUERY, max_results or self.MAX_ROWS_PER_QUERY)
-        total_retrieved = 0
+        first_field = fl.split(",")[0]
+        rows = self.MAX_ROWS_PER_QUERY
+        if max_results is not None:
+            rows = min(rows, max_results)
 
         # Get first page to determine total results
-        first_query = self.get(q, fl, sort, rows, page)
-        results.append(first_query)
-        total_retrieved += len(first_query.papers_dict.get(fl.split(",")[0], []))
+        first_query = self.get(q, fl, sort, rows=rows, start=0)
+        results = [first_query]
+        total_retrieved = len(first_query.papers_dict.get(first_field, []))
 
-        # Get total count
         total_results = first_query.num_found
         if max_results is not None:
             total_results = min(total_results, max_results)
 
-        # Continue pagination if needed
+        # Continue pagination if needed. The offset is tracked explicitly
+        # because the final page may request fewer rows than earlier pages.
         while total_retrieved < total_results:
-            page += 1
             rows_to_get = min(rows, total_results - total_retrieved)
 
-            query = self.get(q, fl, sort, rows_to_get, page)
+            query = self.get(q, fl, sort, rows=rows_to_get, start=total_retrieved)
             results.append(query)
 
-            retrieved = len(query.papers_dict.get(fl.split(",")[0], []))
+            retrieved = len(query.papers_dict.get(first_field, []))
             total_retrieved += retrieved
 
             # Break if we got fewer results than requested (end of results)
@@ -539,6 +468,7 @@ class ADSQueryWrapper:
         page: int = 1,
         verbose: bool = False,
         suppress_warnings: bool = False,
+        start: Optional[int] = None,
     ) -> ADSQuery:
         """
         Perform a generic query to the ADS API.
@@ -559,6 +489,8 @@ class ADSQueryWrapper:
             Whether to print verbose output, by default False.
         suppress_warnings : bool, optional
             Whether to suppress pagination warnings, by default False.
+        start : int, optional
+            Explicit zero-based result offset. Overrides ``page`` if given.
 
         Returns
         -------
@@ -577,7 +509,9 @@ class ADSQueryWrapper:
             raise ValueError(f"Maximum allowed rows is {self.MAX_ROWS_PER_QUERY}")
 
         # Build query parameters
-        params = {"q": q, "fl": fl, "rows": rows, "start": (page - 1) * rows}
+        if start is None:
+            start = (page - 1) * rows
+        params = {"q": q, "fl": fl, "rows": rows, "start": start}
         if sort:
             params["sort"] = sort
 
@@ -592,33 +526,9 @@ class ADSQueryWrapper:
         # Set up headers with auth token
         headers = {"Authorization": f"Bearer {self.token}"}
 
-        # Make request with retries
-        for attempt in range(self.max_attempts):
-            try:
-                response = self._safe_request(url, headers)
-                self.ads_api_calls += 1
-
-                # Check response status
-                if response.status_code == 200:
-                    # Update API calls remaining
-                    self.ads_api_calls_remaining = response.headers.get(
-                        "X-RateLimit-Remaining"
-                    )
-                    return ADSQuery(query_string, fl, rows, response, suppress_warnings)
-                else:
-                    logger.warning(
-                        f"Attempt {attempt+1}/{self.max_attempts} failed with status "
-                        f"{response.status_code}: {response.text}"
-                    )
-            except requests.RequestException as e:
-                logger.warning(
-                    f"Attempt {attempt+1}/{self.max_attempts} failed: {str(e)}"
-                )
-
-        # If we get here, all attempts failed
-        raise RuntimeError(
-            f"Failed to get response from ADS API after {self.max_attempts} attempts"
-        )
+        # Make request (retries are handled by _safe_request)
+        response = self._safe_request(url, headers)
+        return ADSQuery(query_string, fl, rows, response, suppress_warnings)
 
     def citations(
         self,

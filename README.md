@@ -27,7 +27,7 @@ pip install .
 
 ## Getting Started
 
-No manual database setup needed — it initializes automatically at $HOME/myADS_database.db the first time you run a command.
+No manual database setup needed — it is created automatically at `~/.local/share/myads/database.db` the first time you run a command (see [Database Location](#database-location) to change this).
 
 ### 1. Add Your ADS API Token
 
@@ -115,7 +115,7 @@ myads report
 
 - Displays a report with:
   - Publication ID (for ignoring papers)
-  - Author position (1st, 2nd, Last, etc.)
+  - Author position (1st, 2nd, 3rd, ...)
   - Total citations
   - Recent citations (last 90 days)
   - Citations per year
@@ -132,6 +132,12 @@ For a detailed per-paper breakdown including a quarterly citation timeline, use 
 
 ```bash
 myads report --extended
+```
+
+To show only specific publications (IDs from the report), use `--id`:
+
+```bash
+myads report --id 12 15 --extended
 ```
 
 ### Ignore Publications
@@ -167,6 +173,8 @@ Options:
 - `--first-author-only` - Restrict to first author papers only
 - `--format {table,json,csv}` - Output format
 - `--max-rows N` - Number of results (default: 100)
+- `--sort FIELD` - ADS sort order (default: `"citation_count desc"`)
+- `--no-stats` - Skip the summary statistics (table format only)
 
 Example:
 ```bash
@@ -181,14 +189,16 @@ myads search "Jane" "Doe" --orcid 0000-0002-1825-0097 --format csv > output.csv
 | myads remove-author AUTHOR_ID | Remove an author |
 | myads list-authors | List all tracked authors |
 | myads add-token YOUR-TOKEN | Add or update your ADS API token |
-| myads check [--author-id ID] [--verbose] [--deep] | Check for new/updated citations |
+| myads check [--author-id ID] [--verbose] [--deep] [--max-rows N] | Check for new/updated citations |
 | myads report [--author-id ID] [--show-ignored] [--extended] [--id ID ...] | Generate citation reports |
 | myads ignore PUBLICATION_ID [--reason TEXT] | Mark publication as ignored |
 | myads unignore PUBLICATION_ID | Restore tracking for publication |
 | myads list-ignored [--author-id ID] | List ignored publications |
 | myads clear-rejected [--author-id ID] | Clear deep check rejection memory |
 | myads list-rejected [--author-id ID] | View rejected papers from deep check |
-| myads search "First" "Last" [--orcid ORCID] [--first-author-only] | One-off author search |
+| myads search "First" "Last" [--orcid ORCID] [--first-author-only] [--format FMT] | One-off author search |
+
+All commands accept a global `--db-path PATH` option placed before the command (e.g. `myads --db-path my.db report`).
 
 ## How it Works
 
@@ -205,8 +215,9 @@ myADS uses an SQLite database to track publications, citations, and authors. Thi
 Default tracking behavior depends on ORCID: with ORCID, myADS tracks papers at any author position (where ORCID is attached in ADS) plus first-author papers by name; without ORCID, only first-author papers are tracked. Use `--deep` to find additional co-authored papers not captured by ORCID search, with interactive confirmation to avoid false matches.
 
 **Automatic Resilience**:
-- Auto-handles expired ADS tokens
-- Auto-creates the database if it doesn't exist
+- Failed ADS requests are retried with exponential back-off
+- A clear error is raised if your ADS token is invalid or expired (re-run `myads add-token`)
+- The database and its tables are created automatically, and older databases are migrated in place
 
 ## Tips
 
@@ -233,18 +244,6 @@ myads check
 
 # Using command-line flag
 myads --db-path /custom/path/myads.db check
-```
-
-**For development:**
-```bash
-pip install -e ".[dev]"  # Install with dev dependencies (pytest, black, ruff, mypy)
-pip install -e ".[viz]"  # Install with visualization dependencies for notebooks
-```
-
-**Running tests:**
-```bash
-pytest tests/        # Run all tests
-pytest tests/ -v     # Verbose output
 ```
 
 ### No Publications Found
@@ -283,7 +282,44 @@ During `myads check`, you may be prompted to remove papers not found in current 
 ADS API has daily rate limits. If you hit the limit:
 - Reduce `--max-rows` to fetch fewer results
 - Wait 24 hours for limit reset
-- Check remaining calls: the tool displays this after each run
+- Check remaining calls: the number of calls used and remaining is logged when each run finishes (set `LOGLEVEL=WARNING` to hide it)
+
+## Python API
+
+The ADS query layer can also be used directly from Python:
+
+```python
+from myads import ADSQueryWrapper
+
+ads = ADSQueryWrapper("YOUR-ADS-API-TOKEN")
+
+# Generic query (up to 2000 rows per request)
+result = ads.get(q='author:"Doe, Jane"', fl="title,bibcode,citation_count,pubdate",
+                 sort="citation_count desc", rows=50)
+print(result.num_found)
+df = result.papers_df          # pandas DataFrame (adds ads_link, years_since_pub,
+                               # citation_count_per_year when the fields are present)
+for paper in result.papers:    # ADSPaper objects; missing fields are None
+    print(paper.bibcode, paper.title)
+
+# Paginate through every result
+pages = ads.get_all_results(q='author:"Doe, Jane"', fl="bibcode,title")
+
+# Convenience helpers
+ads.citations("2020ApJ...900....1D")   # papers citing a bibcode
+ads.references("2020ApJ...900....1D")  # papers referenced by a bibcode
+ads.search_author("Doe, Jane")
+```
+
+The citation tracker is available as `myads.cite_tracker.CitationTracker`, which exposes the same operations as the CLI.
+
+## Development
+
+```bash
+pip install -e ".[dev]"  # Install with dev dependencies (pytest, black, ruff, mypy)
+pip install -e ".[viz]"  # Install with visualization dependencies for notebooks
+pytest tests/            # Run the test suite (no real ADS calls are made)
+```
 
 ## Disclaimer
 
@@ -291,7 +327,7 @@ This tool queries the NASA/ADS database under fair-use API limits. Make sure you
 
 ## License
 
-MIT License.
+MIT License — see [LICENSE](LICENSE).
 
 ---
 
